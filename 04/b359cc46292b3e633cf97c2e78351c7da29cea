@@ -1,0 +1,37 @@
+docs/superpowers/plans/2026-08-28-complete-program-execution.md
+  s_2f2b8a177ba283::t_25351da05f117b 681
+  s_2f2b8a177ba283::t_e1f41262a6ec71 482
+  s_2f2b8a177ba283::t_a6ab3da7ac4d9f 446
+  s_2f2b8a177ba283::t_d517bac2134b09 32,35,76,82,92,96,131-132
+  s_2f2b8a177ba283::t_22f5575d930e7b 109
+docs/ARCHITECTURE.md
+  s_2f2b8a177ba283::t_e1f41262a6ec71 106,109-112,114
+docs/specs/DATA-MODEL.md
+  s_2f2b8a177ba283::t_e29be357fa635e 199-200,300
+docs/specs/SEARCH-AND-MCP.md
+  s_2f2b8a177ba283::t_e1f41262a6ec71 42,46-49,51
+docs/specs/INGESTION.md
+  s_2f2b8a177ba283::t_a6ab3da7ac4d9f 49-57,70
+docs/specs/ANALYSIS.md
+  s_2f2b8a177ba283::t_6370de2621e0b0 56
+CHANGELOG.md
+  s_2f2b8a177ba283::t_cdf0757d306258 27
+docs/decisions/ADR-0003-preview-manifest-and-publication.md
+  s_2f2b8a177ba283::t_a6ab3da7ac4d9f 14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "04b359cc46292b3e633cf97c2e78351c7da29cea",
+  "prompts": {},
+  "sessions": {
+    "s_2f2b8a177ba283": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a04a7c-f938-7500-b20e-0faa6c4019c5",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Florian BRUNIAUX <florian@bruniaux.com>"
+    }
+  }
+}
