@@ -1,0 +1,125 @@
+.agents/skills/paper-citation/SKILL.md
+  s_d812a5cba40e21::t_04ba8e8b54078c 1-19
+.agents/skills/paper-citation/agents/openai.yaml
+  s_95392a6b844626::t_555b7d08f75eb4 1-9
+.agents/skills/paper-ingest/agents/openai.yaml
+  s_95392a6b844626::t_abb723555137e7 1-4
+.agents/skills/paper-research/agents/openai.yaml
+  s_95392a6b844626::t_e4ed2b8d647cf7 1-9
+.claude/hooks/project-guard.py
+  s_c95e7ae6af0104::t_51b1143d6a957c 1-132
+.claude/hooks/research-router.py
+  s_0a442347250965::t_772d33fbf54d9b 1-71
+.claude/settings.json
+  s_0a442347250965::t_735ca70f79cd7a 1-41
+.claude/skills
+  s_e8d43ee83cdf95::t_ec5a1b2aef98e7 1
+.editorconfig
+  s_a76087f74be2bb::t_8e5a78b38f4ff1 1-15
+.github/workflows/scaffold.yml
+  s_0a442347250965::t_55480d137e8abd 1-22
+.gitignore
+  s_a76087f74be2bb::t_3d1b451d6a4247 1-27
+AGENTS.md
+  s_a76087f74be2bb::t_d218b74fc6bda1 1-110
+CHANGELOG.md
+  s_c95e7ae6af0104::t_971a3fa52df4fa 1-15
+CLAUDE.md
+  s_a76087f74be2bb::t_6219020b1ec415 1-59
+README.md
+  s_a76087f74be2bb::t_df4fd15887b59b 1-76
+config.example.toml
+  s_0a442347250965::t_ccf18a47ae41b7 1-18
+docs/DEVELOPMENT.md
+  s_0a442347250965::t_7395c3a982c2ca 1-78
+docs/ROADMAP.md
+  s_0a442347250965::t_0f43b0cf1f23b8 1-139
+docs/superpowers/plans/2026-08-28-foundation-vertical-slice.md
+  s_c95e7ae6af0104::t_3186bb536427dd 1-474
+docs/superpowers/specs/2026-08-28-paper-insights-design.md
+  s_a7353b1c97ca98::t_b429d54ac16fb4 1-71
+pyproject.toml
+  s_a76087f74be2bb::t_dc7d82dc2497b8 1-53
+scripts/validate_project.py
+  s_aeebbf2fc2680c::t_b926e71dfe45b6 1-139
+tests/__init__.py
+  s_0a442347250965::t_fbb1bde793bb06 1
+tests/hooks/__init__.py
+  s_95392a6b844626::t_c53e1dc868691f 1
+tests/hooks/test_project_guard.py
+  s_c95e7ae6af0104::t_a2a9a6e04ec251 1-93
+tests/hooks/test_research_router.py
+  s_0a442347250965::t_3d11f12572b0d5 1-50
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "1830d8ce6e5174c76387c227d4d0bf4919542d97",
+  "prompts": {},
+  "sessions": {
+    "s_0a442347250965": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a04233-7990-7c82-96d1-1418fd7722e9",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "Florian BRUNIAUX <florian@bruniaux.com>"
+    },
+    "s_95392a6b844626": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a04821-7023-7112-aeb8-f4aa59348ce9",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Florian BRUNIAUX <florian@bruniaux.com>"
+    },
+    "s_a7353b1c97ca98": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a047a3-6a74-7ac2-895b-5cafdef2fe45",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Florian BRUNIAUX <florian@bruniaux.com>"
+    },
+    "s_a76087f74be2bb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a01f2a-b167-78f0-a126-7450029bd920",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Florian BRUNIAUX <florian@bruniaux.com>"
+    },
+    "s_aeebbf2fc2680c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a03e20-0cfd-78b0-b1fa-bfb10ef6a72f",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Florian BRUNIAUX <florian@bruniaux.com>"
+    },
+    "s_c95e7ae6af0104": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d7e81256-4001-4c80-b15f-c0b10574b72e",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Florian BRUNIAUX <florian@bruniaux.com>"
+    },
+    "s_d812a5cba40e21": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a033c4-cc98-74d2-adf5-63f175b8463b",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Florian BRUNIAUX <florian@bruniaux.com>"
+    },
+    "s_e8d43ee83cdf95": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a049b3-e0f7-7682-ac4a-ce8a2dbabcac",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Florian BRUNIAUX <florian@bruniaux.com>"
+    }
+  }
+}
