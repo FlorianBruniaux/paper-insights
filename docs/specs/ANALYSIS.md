@@ -53,6 +53,7 @@ Une tentative invalide, tronquée ou échouée reste auditée mais ne remplace j
 
 La clé SHA-256 couvre JSON canonique de:
 
+- `paper_version_id`;
 - SHA-256 artefact;
 - liste ordonnée des `passage_id`;
 - `chunk_schema_version`;

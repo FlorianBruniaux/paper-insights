@@ -29,10 +29,10 @@
 
 | Context | Authority | Public ports |
 | --- | --- | --- |
-| Platform | settings, paths, clock, IDs, errors, composition | `Clock`, `IdGenerator`, `Settings` |
+| Platform | settings, paths, clock, IDs, errors, composition | `Clock`, `IdGenerator` |
 | Acquisition | provider queries, pages, snapshots, preview and run lifecycle | `DiscoveryProvider`, `CatalogUnitOfWorkFactory`, `BlobStore` |
 | Corpus | papers, versions, observed authors, identifiers, collections | `CatalogReader`, `CorpusRepository` |
-| Retrieval | index generations, documents, passages, BM25 search | `SearchIndexBuilder`, `SearchIndexReader` |
+| Retrieval | index generations, documents, passages, BM25 search | `SearchIndexBuilder`, `SearchIndexReader`, `CatalogRevisionGuard` |
 | Citations | BibTeX, Markdown and CSL-JSON rendering | `CitationRenderer` |
 | Monitoring | watchlists, overlap windows, cursors and digests | `WatchlistUnitOfWorkFactory` |
 | Analysis | PDF acquisition, extraction, chunking, LLM results and claims | `FullTextProvider`, `TextExtractor`, `AnalysisBackend`, `AnalysisUnitOfWorkFactory` |
@@ -73,13 +73,13 @@ An architecture test fails if `domain` imports `application`, `adapters` or `int
 
 ## 3. Contracts frozen at Gate 0
 
-Create immutable dataclasses and protocols matching these signatures. Pydantic is restricted to configuration, CLI/MCP envelopes and LLM boundary schemas.
+Create immutable dataclasses and protocols matching this synchronized excerpt. `docs/specs/PORTS.md` is the exhaustive authority for signatures and DTO names. Pydantic is restricted to configuration, CLI/MCP envelopes and LLM boundary schemas.
 
 ```python
 @dataclass(frozen=True, slots=True)
 class DiscoveryPage:
     capture_id: UUID
-    records: tuple[SourceRecord, ...]
+    records: tuple[DiscoveryRecord, ...]
     raw_payload: bytes
     media_type: str
     retrieved_at: datetime
@@ -89,11 +89,11 @@ class DiscoveryPage:
 
 @dataclass(frozen=True, slots=True)
 class DiscoveryBatch:
-    source_id: str
+    source_id: SourceId
     query: DiscoveryQuery
     pages: tuple[DiscoveryPage, ...]
     records: tuple[ObservedPaperVersion, ...]
-    issues: tuple[CollectionIssue, ...]
+    issues: tuple[DiscoveryIssue, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,7 +106,7 @@ class PreparedDiscovery:
 
 
 class DiscoveryProvider(Protocol):
-    source_id: str
+    source_id: SourceId
 
     def discover(self, query: DiscoveryQuery) -> DiscoveryBatch: ...
 
@@ -128,6 +128,8 @@ class CatalogUnitOfWork(Protocol):
     ingestion: IngestionRepository
     collections: CollectionRepository
 
+    def __enter__(self) -> CatalogUnitOfWork: ...
+    def __exit__(self, exc_type: object, exc: object, tb: object) -> bool: ...
     def commit(self) -> None: ...
     def rollback(self) -> None: ...
 
@@ -441,7 +443,7 @@ Commit: `feat: add installable local platform foundation`
 **Steps:**
 
 - [ ] Prove preview makes zero filesystem or catalogue mutation.
-- [ ] Digest canonical query, selected source version IDs and, for every ordered raw page, capture UUIDv7, SHA-256, retrieval timestamp and request fingerprint.
+- [ ] Digest canonical query, every selected page/record locator with raw-record SHA-256, and, for every ordered raw page, capture UUIDv7, SHA-256, retrieval timestamp and request fingerprint.
 - [ ] Reject expired or mismatched confirmation before opening a run.
 - [ ] Publish raw and canonical metadata blobs outside SQL transactions, then attach all snapshots and records with run creation in one transaction before processing one record per short transaction.
 - [ ] Inject crashes before blob replace, after blob publication and before the snapshot/run commit; prove no partial snapshot graph becomes visible.
@@ -477,7 +479,7 @@ Commit: `feat: add confirmed idempotent ingestion`
 **Steps:**
 
 - [ ] Generate deterministic title and abstract passages from each observation's canonical `metadata` artifact in a coherent catalogue snapshot.
-- [ ] Build one sibling FTS database whose authoritative receipt is `index_meta`, run `quick_check`, verify counts and recheck catalogue revision.
+- [ ] Build one sibling FTS database in `journal_mode=DELETE` whose authoritative receipt is `index_meta`; commit and close it, reject `-wal`/`-shm`, fsync and reopen read-only for `quick_check` before the guarded catalogue revision recheck.
 - [ ] Abandon a stale build and preserve the previously published index after any injected crash.
 - [ ] Open reads with URI `mode=ro`, enable `query_only` and sanitize hostile FTS input.
 - [ ] Return stable IDs, raw BM25 score, rank, bounded excerpt, coverage and index revision.
@@ -676,6 +678,7 @@ Commit: `feat: add bounded fulltext extraction`
 
 - [ ] Freeze corpus capabilities, native scores, source types, partial coverage and evidence-bundle manifest in ADR-0005.
 - [ ] Land both additive migrations against one linear Alembic head.
+- [ ] Add `author_identity_identifier_evidence` in `0004_author_identity.py`; never place an initial-schema FK toward a table that does not yet exist.
 - [ ] Run zero-to-head, every-upgrade, foreign-key and quick-check tests before opening Wave 4 worktrees.
 - [ ] Commit the ADR separately from Worker A's migration commit with explicit pathspecs.
 

@@ -46,7 +46,15 @@ Le digest est le SHA-256 UTF-8 d'un JSON canonique avec clés triées, séparate
   "schema_version": "prepared-discovery-v1",
   "source_id": "arxiv",
   "query": {},
-  "selected_source_versions": [],
+  "selected_records": [
+    {
+      "page_ordinal": 0,
+      "raw_record_sha256": "<64 hex>",
+      "record_ordinal": 0,
+      "source_item_id": "2608.01234",
+      "source_version_key": "2608.01234v1"
+    }
+  ],
   "pages": [
     {
       "capture_id": "<uuidv7>",
@@ -59,7 +67,7 @@ Le digest est le SHA-256 UTF-8 d'un JSON canonique avec clés triées, séparate
 }
 ```
 
-`query` est l'objet canonique fermé. Les versions sélectionnées conservent l'ordre déterministe de la source après déduplication de pagination. Les pages conservent leur ordre, leur `capture_id`, leur empreinte de requête, leur date de récupération et leur SHA-256. Modifier requête, sélection, ordre, version, capture ou payload change le digest. Rejouer le même objet préparé conserve le digest; une nouvelle collecte du même payload produit un `capture_id` distinct.
+`query` est l'objet canonique fermé. Les records sélectionnés conservent l'ordre déterministe après déduplication et leur locator complet: page, ordinal, identifiant d'oeuvre nullable, identifiant de version nullable et empreinte du record brut. Les pages conservent leur ordre, leur `capture_id`, leur empreinte de requête, leur date de récupération et leur SHA-256. Déplacer une sélection vers une autre occurrence de pagination change donc le digest même si sa version normalisée est identique. Modifier requête, sélection, ordre, version, capture ou payload change le digest. Rejouer le même objet préparé conserve le digest; une nouvelle collecte du même payload produit un `capture_id` distinct.
 
 `PreparedDiscovery` conserve le batch exact, l'aperçu, le digest, `prepared_at` et `expires_at`. Le service vérifie la cohérence source/requête, le mapping total page-record et le digest avant toute mutation.
 

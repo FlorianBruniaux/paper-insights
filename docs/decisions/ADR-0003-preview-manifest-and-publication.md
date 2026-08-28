@@ -11,7 +11,7 @@ Une interface `preview(query)` suivie de `iter_records(query)` peut interroger d
 
 - le provider expose `discover(query) -> DiscoveryBatch`;
 - `PrepareDiscovery` produit un `PreparedDiscovery` immuable avec batch, preview, digest et expiration;
-- le digest couvre requête canonique, versions sélectionnées et, pour chaque page ordonnée, `capture_id` UUIDv7, SHA-256, date de récupération et empreinte de requête;
+- le digest couvre requête canonique, locators complets des records sélectionnés et, pour chaque page ordonnée, `capture_id` UUIDv7, SHA-256, date de récupération et empreinte de requête;
 - l'exécution consomme ce manifeste exact et ne rappelle jamais le provider;
 - les blobs sont publiés hors transaction SQL par fichier sibling privé, `fsync`, validation puis `os.replace`;
 - un échec d'attachement peut laisser un blob orphelin signalé par `doctor`;

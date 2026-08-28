@@ -103,14 +103,15 @@ Une lecture cohérente utilise un `CatalogSnapshot`: la révision et les lignes 
 ## Publication de l'index FTS5
 
 1. Ouvrir un snapshot catalogue et mémoriser sa révision.
-2. Construire une base candidate dans un fichier sibling.
+2. Construire une base candidate dans un fichier sibling avec `journal_mode=DELETE`.
 3. Insérer documents, passages et métadonnées dans une transaction stable.
 4. Exécuter `PRAGMA quick_check`, contrôler les compteurs et écrire le reçu autoritaire dans `index_meta`.
-5. Prendre un `CatalogRevisionGuard` avec `BEGIN IMMEDIATE`.
-6. Relire la révision sous cette garde et abandonner si elle diffère.
-7. Forcer la candidate, publier cet unique fichier par `os.replace`, puis forcer le répertoire parent avant de libérer la garde.
+5. Committer, fermer toutes les connexions, refuser tout `-wal` ou `-shm`, forcer le fichier, puis le vérifier à nouveau en lecture seule.
+6. Prendre un `CatalogRevisionGuard` avec `BEGIN IMMEDIATE`.
+7. Relire la révision sous cette garde et abandonner si elle diffère.
+8. Publier la candidate fermée par `os.replace`, puis forcer le répertoire parent avant de libérer la garde.
 
-Une erreur ou une révision obsolète laisse l'index publié précédent intact. `index_meta` rend la nouvelle base auto-descriptive après le remplacement; aucun sidecar ne crée une seconde frontière atomique. Le service de recherche ouvre l'index en `mode=ro` avec `query_only=ON` et ne déclenche ni réseau, ni ingestion, ni analyse.
+Une erreur ou une révision obsolète laisse l'index publié précédent intact. `index_meta` rend la nouvelle base auto-descriptive après le remplacement; aucun journal SQLite ou sidecar ne crée une seconde frontière atomique. Le service de recherche ouvre l'index en `mode=ro` avec `query_only=ON` et ne déclenche ni réseau, ni ingestion, ni analyse.
 
 ## Flux d'analyse et preuves durables
 

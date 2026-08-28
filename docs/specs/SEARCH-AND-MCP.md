@@ -39,15 +39,16 @@ Le texte est normalisé en Unicode NFC et les fins de ligne deviennent `\n`. Les
 ## Construction et publication de l'index
 
 1. Ouvrir un `CatalogSnapshot` read-only et lire sa révision avec ses documents.
-2. Construire une base candidate sibling dans un ordre stable.
+2. Construire une base candidate sibling dans un ordre stable avec `journal_mode=DELETE`; le catalogue garde WAL, pas le fichier FTS publiable.
 3. Insérer `documents`, `passages`, FTS et `index_meta` dans une transaction.
 4. Exécuter `PRAGMA quick_check`, vérifier les compteurs et écrire le reçu autoritaire dans l'unique ligne `index_meta` de la candidate.
 5. Valider que le reçu contient schémas, génération, révision catalogue, compteurs et empreinte logique du contenu indexé.
-6. Prendre un `CatalogRevisionGuard` avec `BEGIN IMMEDIATE`.
-7. Relire la révision. Si elle diffère, abandonner et supprimer uniquement le candidat.
-8. Forcer la candidate sur disque, la publier par un unique `os.replace`, puis forcer le répertoire parent avant de libérer la garde.
+6. Committer, fermer toute connexion candidate, refuser la présence d'un fichier `-wal` ou `-shm`, forcer le fichier sur disque, puis le rouvrir en lecture seule pour un dernier `quick_check` et la lecture de `index_meta`.
+7. Prendre un `CatalogRevisionGuard` avec `BEGIN IMMEDIATE`.
+8. Relire la révision. Si elle diffère, abandonner et supprimer uniquement le candidat.
+9. Publier la candidate fermée par un unique `os.replace`, puis forcer le répertoire parent avant de libérer la garde.
 
-Une erreur ou une révision obsolète laisse l'index publié précédent intact. Une panne avant le remplacement laisse l'ancien index; une panne après le remplacement laisse une base nouvelle et auto-descriptive. Aucun second fichier ne participe à l'atomicité.
+Une erreur ou une révision obsolète laisse l'index publié précédent intact. Une panne avant le remplacement laisse l'ancien index; une panne après le remplacement laisse une base nouvelle et auto-descriptive. Aucun journal SQLite ni second fichier ne participe à l'atomicité.
 
 ## Requêtes et résultats
 

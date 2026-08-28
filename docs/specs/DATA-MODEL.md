@@ -196,7 +196,8 @@ Les preuves sont séparées des associations canoniques afin de conserver plusie
 
 - `paper_identifier_evidence` référence un `paper_identifier`, une `source` et un `snapshot_record` par la FK composite `(source_snapshot_id, record_ordinal)`;
 - `version_identifier_evidence` applique la même structure à un `version_identifier`;
-- `author_identifier_evidence` référence un `author_identifier` et exactement une autorité parmi une `version_observation` ou une `identity_observation`, avec une contrainte `CHECK` exclusive.
+- `author_identifier_evidence`, présente dès la migration initiale, référence un `author_identifier` et une `version_observation`;
+- `author_identity_identifier_evidence`, ajoutée avec les tables d'identité par la migration `0004_author_identity.py`, référence un `author_identifier` et une `identity_observation`.
 
 Chaque preuve conserve `observed_at` et, lorsqu'elle vient d'une source externe, `source_id`. Une valeur identique observée plusieurs fois garde plusieurs preuves sans dupliquer l'association canonique. Un conflit entre deux entités reste `catalog_conflict`; le titre ou le nom seul ne le résout jamais.
 
@@ -296,7 +297,7 @@ Une tentative ne devient `complete` que si chaque claim possède au moins un pas
 
 ## Identité des auteurs
 
-La migration d'identité ajoute les observations de provider, affiliations observées, candidats, événements de merge/split et opérations inverses. Chaque événement conserve preuve, acteur, date et version attendue de l'état. Une URL LinkedIn confirmée est distincte d'une URL de recherche.
+La migration d'identité ajoute les observations de provider, `author_identity_identifier_evidence`, affiliations observées, candidats, événements de merge/split et opérations inverses. Chaque événement conserve preuve, acteur, date et version attendue de l'état. Une URL LinkedIn confirmée est distincte d'une URL de recherche.
 
 ## Index de recherche
 
