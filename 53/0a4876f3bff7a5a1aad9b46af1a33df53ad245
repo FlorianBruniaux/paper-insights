@@ -1,0 +1,19 @@
+docs/specs/PORTS.md
+  s_2f2b8a177ba283::t_b28c7795b4ad83 64,121-124,155-156,178-179,213,216
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "530a4876f3bff7a5a1aad9b46af1a33df53ad245",
+  "prompts": {},
+  "sessions": {
+    "s_2f2b8a177ba283": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a04a7c-f938-7500-b20e-0faa6c4019c5",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Florian BRUNIAUX <florian@bruniaux.com>"
+    }
+  }
+}
