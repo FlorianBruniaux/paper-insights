@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ingest Research Papers"
+  short_description: "Preview and collect papers into the local corpus"
+  default_prompt: "Use $paper-ingest to preview this paper collection request and wait for confirmation when required."

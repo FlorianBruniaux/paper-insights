@@ -1,0 +1,18 @@
+[paper_insights]
+data_root = "./data"
+request_timeout_seconds = 30
+user_agent = "paper-insights/0.1"
+
+[sources.arxiv]
+enabled = true
+categories = ["cs.AI"]
+page_size = 100
+
+[search]
+default_limit = 10
+maximum_limit = 50
+
+[analysis]
+enabled = false
+provider = ""
+model = ""
