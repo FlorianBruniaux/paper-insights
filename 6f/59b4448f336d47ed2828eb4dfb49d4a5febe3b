@@ -1,0 +1,57 @@
+README.md
+  s_2f2b8a177ba283::t_94abd46ecb28fe 32-35,38,50
+docs/specs/ANALYSIS.md
+  s_2f2b8a177ba283::t_07047dfb03ee2e 68-75,85
+docs/specs/PORTS.md
+  s_2f2b8a177ba283::t_0b9b84b470c6b5 1-207
+docs/specs/INGESTION.md
+  s_2f2b8a177ba283::t_65366f21626de7 17,52,62
+  s_2f2b8a177ba283::t_74d7cee116f52f 50-51,53-58,78,81-86,88,100,181
+docs/ARCHITECTURE.md
+  s_2f2b8a177ba283::t_94abd46ecb28fe 66-67
+  s_2f2b8a177ba283::t_11ed91d15fc030 74,88-90,108,111,113,133
+CHANGELOG.md
+  s_2f2b8a177ba283::t_11c9d3ce97ed12 20,26
+docs/decisions/ADR-0002-versioned-observations-and-provenance.md
+  s_2f2b8a177ba283::t_11ed91d15fc030 18-20,26
+docs/specs/SEARCH-AND-MCP.md
+  s_2f2b8a177ba283::t_11ed91d15fc030 7,44-45,48,50
+docs/specs/WATCHLISTS.md
+  s_2f2b8a177ba283::t_dc7fa0c92f267c 26-31,73
+docs/decisions/ADR-0003-preview-manifest-and-publication.md
+  s_2f2b8a177ba283::t_11ed91d15fc030 18,21
+  s_2f2b8a177ba283::t_65366f21626de7 14
+docs/superpowers/plans/2026-08-28-complete-program-execution.md
+  s_2f2b8a177ba283::t_8dc3e862f605a5 37-40,104,151,327,446-447,479-480,532,536,538,540-541,550
+  s_2f2b8a177ba283::t_168e9f2a8cd9fd 115,119-123,128-129,136-138,142,144-146
+  s_2f2b8a177ba283::t_1d770d854b9ecd 607,664-670,673-682,702-704,710,714,716,722
+  s_2f2b8a177ba283::t_3cdd1110356717 671-672,690,732
+  s_2f2b8a177ba283::t_65366f21626de7 81,444
+  s_2f2b8a177ba283::t_11c9d3ce97ed12 213,237
+  s_2f2b8a177ba283::t_3c79efb8283e45 800
+docs/decisions/ADR-0004-modular-monolith-ports.md
+  s_2f2b8a177ba283::t_11c9d3ce97ed12 23-24
+docs/specs/PRODUCT.md
+  s_2f2b8a177ba283::t_dc7fa0c92f267c 83,86
+docs/specs/DATA-MODEL.md
+  s_2f2b8a177ba283::t_8b21dab0e7fdc2 35,183,187,191,193-201,260,262,269,303
+  s_2f2b8a177ba283::t_981879dc1ccdfa 68,77
+docs/specs/AUTHOR-IDENTITY.md
+  s_2f2b8a177ba283::t_94abd46ecb28fe 32,53
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "6f59b4448f336d47ed2828eb4dfb49d4a5febe3b",
+  "prompts": {},
+  "sessions": {
+    "s_2f2b8a177ba283": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a04a7c-f938-7500-b20e-0faa6c4019c5",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Florian BRUNIAUX <florian@bruniaux.com>"
+    }
+  }
+}
