@@ -13,3 +13,4 @@ Toutes les modifications notables du projet sont consignées ici.
 - Découverte `unittest` vérifiée depuis la racine du répertoire `tests`.
 - Garde Git vérifiée contre les stages larges sans bloquer les pathspecs relatifs explicites.
 - Roadmap et plan d'implémentation de la première tranche verticale.
+- Plan d'exécution complet des phases 0 à 7, avec contrats P0, lots parallèles, propriétaires de fichiers, gates et critères de release.
