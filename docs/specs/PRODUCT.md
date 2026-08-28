@@ -80,10 +80,10 @@ Commandes cibles:
 
 ```bash
 paper-insights watch add agents-weekly --source arxiv --query "AI coding agents" --category cs.AI
-paper-insights watch run agents-weekly --json
+paper-insights watch run agents-weekly --yes --json
 ```
 
-La watchlist conserve requête canonique, filtres, source, overlap et dernier curseur validé. Le résultat distingue nouveaux papiers, nouvelles versions, observations mises à jour, inchangés et erreurs. Le curseur candidat n'est validé qu'après une run réussie.
+La watchlist conserve requête canonique, filtres, source, overlap et dernier curseur validé. Chaque exécution exige `--yes`, y compris depuis un scheduler; sans confirmation, elle affiche la preview et termine avec le code `3` sans mutation. Le résultat distingue nouveaux papiers, nouvelles versions, observations mises à jour, inchangés et erreurs. Le curseur candidat n'est validé qu'après une run réussie.
 
 ### Diagnostiquer et réparer une interruption
 

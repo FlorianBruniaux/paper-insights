@@ -63,13 +63,15 @@ Règles vérifiées par AST:
 
 Pydantic reste limité à la configuration, aux enveloppes CLI/MCP et aux schémas de frontière LLM. Les contrats métier utilisent des dataclasses immuables.
 
+Les signatures publiques et DTO de frontière sont figés dans [PORTS.md](specs/PORTS.md).
+
 ## Autorités et frontières
 
 | Contexte | Autorité | Ports publics |
 | --- | --- | --- |
 | Plateforme | horloge, identifiants, configuration et chemins | `Clock`, `IdGenerator` |
 | Acquisition | requêtes, pages, snapshots, preview et runs | `DiscoveryProvider`, `CatalogUnitOfWorkFactory`, `BlobStore` |
-| Corpus | papiers, versions, observations, auteurs, identifiants et collections | `CatalogReader`, `CorpusRepository` |
+| Corpus | papiers, versions, observations, auteurs, identifiants et collections | `CatalogReader`, `CatalogUnitOfWorkFactory` |
 | Retrieval | générations FTS, documents, passages et BM25 | `SearchIndexBuilder`, `SearchIndexReader`, `CatalogRevisionGuard` |
 | Citations | BibTeX, Markdown et CSL-JSON | `CitationRenderer` |
 | Monitoring | watchlists, recouvrement, curseurs et digests | `WatchlistUnitOfWorkFactory` |
@@ -83,9 +85,9 @@ Pydantic reste limité à la configuration, aux enveloppes CLI/MCP et aux schém
 1. Un provider exécute une requête bornée et retourne un `DiscoveryBatch` immuable contenant pages brutes, enregistrements normalisés et issues.
 2. Le service prépare un `PreparedDiscovery`, son aperçu, son digest et son expiration sans écrire dans le corpus.
 3. La confirmation porte sur ce manifeste exact. L'exécution ne rappelle jamais le provider.
-4. Chaque page brute est publiée comme blob, puis attachée comme `source_snapshot`. Une page multi-papiers n'est jamais un artefact de papier.
-5. Chaque occurrence conserve son snapshot et son ordinal dans `snapshot_records`.
-6. Une run est créée. Chaque record sélectionné est traité dans une transaction courte `BEGIN IMMEDIATE`.
+4. Les pages brutes et les JSON bibliographiques canoniques sont publiés comme blobs immuables.
+5. Une transaction unique attache toutes les pages comme `source_snapshots`, crée leurs `snapshot_records` et crée la run. Une page multi-papiers n'est jamais un artefact de papier.
+6. Chaque record sélectionné est ensuite traité dans une transaction courte `BEGIN IMMEDIATE`; l'artefact `metadata` relie son observation au JSON canonique exact.
 7. La transaction item crée ou retrouve papier, version et observation, relie provenance, auteurs, catégories et identifiants, puis enregistre un outcome unique.
 8. La finalisation recalcule les compteurs depuis les items et refuse un invariant faux.
 9. Une interruption reste visible comme `running`. `doctor` la signale sans mutation; `repair interrupted-runs --yes` est la seule réparation.
@@ -103,12 +105,12 @@ Une lecture cohérente utilise un `CatalogSnapshot`: la révision et les lignes 
 1. Ouvrir un snapshot catalogue et mémoriser sa révision.
 2. Construire une base candidate dans un fichier sibling.
 3. Insérer documents, passages et métadonnées dans une transaction stable.
-4. Exécuter `PRAGMA quick_check`, contrôler les compteurs et calculer le SHA-256.
+4. Exécuter `PRAGMA quick_check`, contrôler les compteurs et écrire le reçu autoritaire dans `index_meta`.
 5. Prendre un `CatalogRevisionGuard` avec `BEGIN IMMEDIATE`.
 6. Relire la révision sous cette garde et abandonner si elle diffère.
-7. Publier l'index et son reçu privé par `os.replace` avant de libérer la garde.
+7. Forcer la candidate, publier cet unique fichier par `os.replace`, puis forcer le répertoire parent avant de libérer la garde.
 
-Une erreur ou une révision obsolète laisse l'index publié précédent intact. Le service de recherche ouvre l'index en `mode=ro` avec `query_only=ON` et ne déclenche ni réseau, ni ingestion, ni analyse.
+Une erreur ou une révision obsolète laisse l'index publié précédent intact. `index_meta` rend la nouvelle base auto-descriptive après le remplacement; aucun sidecar ne crée une seconde frontière atomique. Le service de recherche ouvre l'index en `mode=ro` avec `query_only=ON` et ne déclenche ni réseau, ni ingestion, ni analyse.
 
 ## Flux d'analyse et preuves durables
 
@@ -128,7 +130,7 @@ Les commandes suivantes sont des contrats cibles, pas une preuve de disponibilit
 - `paper-insights discover` et `paper-insights ingest` pour l'acquisition;
 - `paper-insights search`, `paper-insights index` et `paper-insights cite` pour la recherche;
 - `paper-insights collections` pour les mutations de collections hors MCP;
-- `paper-insights watch` pour la veille appelée par un scheduler externe;
+- `paper-insights watch run <slug> --yes` pour chaque veille appelée par un scheduler externe;
 - `paper-insights analyze` et `paper-insights authors` pour les gates ultérieures;
 - `paper-insights repair interrupted-runs --yes` pour la récupération explicite;
 - `paper-insights mcp serve` pour la façade locale read-only.

@@ -4,7 +4,7 @@
 
 La recherche FTS est une projection remplaçable. Elle indexe d'abord le titre et le résumé de l'observation courante de chaque version courante. Le texte intégral autorisé ajoute ensuite des passages sans modifier le contrat de lecture.
 
-Un passage contient:
+Chaque observation possède un artefact `metadata` dont le blob est le JSON bibliographique canonique exact. Les passages de titre et de résumé référencent cet artefact; les passages de texte intégral référencent l'artefact `text` correspondant. Un passage contient:
 
 - `passage_id`;
 - `paper_id`, `paper_version_id` et `version_observation_id`;
@@ -41,13 +41,13 @@ Le texte est normalisé en Unicode NFC et les fins de ligne deviennent `\n`. Les
 1. Ouvrir un `CatalogSnapshot` read-only et lire sa révision avec ses documents.
 2. Construire une base candidate sibling dans un ordre stable.
 3. Insérer `documents`, `passages`, FTS et `index_meta` dans une transaction.
-4. Exécuter `PRAGMA quick_check`, vérifier les compteurs et calculer le SHA-256.
-5. Écrire un reçu candidat privé.
+4. Exécuter `PRAGMA quick_check`, vérifier les compteurs et écrire le reçu autoritaire dans l'unique ligne `index_meta` de la candidate.
+5. Valider que le reçu contient schémas, génération, révision catalogue, compteurs et empreinte logique du contenu indexé.
 6. Prendre un `CatalogRevisionGuard` avec `BEGIN IMMEDIATE`.
 7. Relire la révision. Si elle diffère, abandonner et supprimer uniquement le candidat.
-8. Publier base et reçu par `os.replace` avant de libérer la garde.
+8. Forcer la candidate sur disque, la publier par un unique `os.replace`, puis forcer le répertoire parent avant de libérer la garde.
 
-Une erreur ou une révision obsolète laisse l'index publié précédent intact. Le reçu publié contient schéma d'index, schéma de chunk, génération, révision catalogue, compteurs et SHA-256.
+Une erreur ou une révision obsolète laisse l'index publié précédent intact. Une panne avant le remplacement laisse l'ancien index; une panne après le remplacement laisse une base nouvelle et auto-descriptive. Aucun second fichier ne participe à l'atomicité.
 
 ## Requêtes et résultats
 

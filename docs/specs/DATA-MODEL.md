@@ -32,7 +32,7 @@ Les identifiants suivants sont des UUIDv7 générés localement: `paper_id`, `pa
 
 La migration initialise exactement une ligne avec `revision = 0`. Toute transaction catalogue validée qui contient au moins une mutation visible incrémente la révision exactement une fois dans cette transaction. Une lecture, un no-op, un rollback ou une erreur ne la change pas.
 
-La création d'une run, chaque item committé, la finalisation, une mutation de collection et une réparation explicite sont des mutations visibles séparées. La publication d'un blob non attaché ne change pas la révision.
+L'attachement de toutes les pages confirmées et de leurs records avec la création de la run forme une seule transaction visible et incrémente la révision une fois. Chaque item committé, la finalisation, une mutation de collection et une réparation explicite sont ensuite des mutations visibles séparées. La publication d'un blob non attaché ne change pas la révision.
 
 ## Sources, blobs et snapshots
 
@@ -65,6 +65,7 @@ Une ligne représente une page ou réponse brute qui peut contenir plusieurs pap
 | Colonne | Règle |
 | --- | --- |
 | `id` | UUIDv7, clé primaire |
+| `capture_id` | UUIDv7 créé à la collecte, unique |
 | `source_id` | FK vers `sources` |
 | `stored_blob_id` | FK vers `stored_blobs` |
 | `prepared_digest` | SHA-256 du `PreparedDiscovery` exécuté |
@@ -73,7 +74,7 @@ Une ligne représente une page ou réponse brute qui peut contenir plusieurs pap
 | `retrieved_at` | UTC, date de récupération source |
 | `next_cursor` | nullable, opaque |
 
-Contrainte unique: `(prepared_digest, page_ordinal)`. Rejouer le même manifeste ne crée pas un second snapshot. Une nouvelle découverte identique peut enregistrer un nouvel événement source tout en réutilisant le même blob.
+Contrainte unique: `(prepared_digest, page_ordinal)`. Le digest couvre pour chaque page son `capture_id`, son SHA-256, son `retrieved_at` et son `request_fingerprint`. Rejouer le même objet `PreparedDiscovery` ne crée pas un second snapshot. Une nouvelle collecte du même payload reçoit un nouveau `capture_id`, donc un nouveau digest et un nouvel événement source, tout en réutilisant le même blob adressé par contenu.
 
 ### `snapshot_records`
 
@@ -179,17 +180,25 @@ Les associations polymorphiques sont interdites.
 
 ### `paper_identifiers`
 
-`paper_id` est une FK vers `papers`. La ligne contient `source_id`, `scheme`, `canonical_value`, `verified_at` nullable et la référence composite au snapshot record qui l'a prouvée. Contrainte unique: `(source_id, scheme, canonical_value)`.
+`paper_id` est une FK vers `papers`. La ligne canonique contient `scheme`, `canonical_value` et `verified_at` nullable. Contrainte unique globale: `(scheme, canonical_value)`.
 
 ### `version_identifiers`
 
-`paper_version_id` est une FK vers `paper_versions`. La ligne contient les mêmes champs de provenance. Contrainte unique: `(source_id, scheme, canonical_value)`.
+`paper_version_id` est une FK vers `paper_versions`. La ligne canonique contient les mêmes champs hors provenance. Contrainte unique globale: `(scheme, canonical_value)`.
 
 ### `author_identifiers`
 
-`author_id` est une FK vers `authors`. La ligne contient `source_id`, `scheme`, `canonical_value`, `verification_status`, `verified_at` et une preuve vers une observation de version ou une observation d'identité. ORCID et OpenAlex ne sont pas dupliqués comme colonnes sur `authors`.
+`author_id` est une FK vers `authors`. La ligne canonique contient `scheme`, `canonical_value`, `verification_status` et `verified_at`. Contrainte unique globale: `(scheme, canonical_value)`. ORCID et OpenAlex ne sont pas dupliqués comme colonnes sur `authors`.
 
-Une valeur identique observée plusieurs fois garde plusieurs preuves sans dupliquer l'association canonique. Un conflit entre deux entités reste `catalog_conflict`; le titre ou le nom seul ne le résout jamais.
+### Preuves d'identifiants
+
+Les preuves sont séparées des associations canoniques afin de conserver plusieurs observations sans dupliquer l'identifiant:
+
+- `paper_identifier_evidence` référence un `paper_identifier`, une `source` et un `snapshot_record` par la FK composite `(source_snapshot_id, record_ordinal)`;
+- `version_identifier_evidence` applique la même structure à un `version_identifier`;
+- `author_identifier_evidence` référence un `author_identifier` et exactement une autorité parmi une `version_observation` ou une `identity_observation`, avec une contrainte `CHECK` exclusive.
+
+Chaque preuve conserve `observed_at` et, lorsqu'elle vient d'une source externe, `source_id`. Une valeur identique observée plusieurs fois garde plusieurs preuves sans dupliquer l'association canonique. Un conflit entre deux entités reste `catalog_conflict`; le titre ou le nom seul ne le résout jamais.
 
 ## Runs et erreurs
 
@@ -248,15 +257,16 @@ Une erreur référence `run_id`, l'item ou le snapshot record, une étape fermé
 | --- | --- |
 | `id` | UUIDv7, clé primaire |
 | `paper_version_id` | FK vers `paper_versions` |
+| `version_observation_id` | FK nullable vers `version_observations` |
 | `stored_blob_id` | FK vers `stored_blobs` |
-| `kind` | `abstract`, `pdf`, `text`, `analysis` |
+| `kind` | `metadata`, `pdf`, `text`, `analysis` |
 | `source_url` | nullable, observée |
 | `parent_artifact_id` | FK nullable pour un dérivé |
 | `producer_name` | nullable |
 | `producer_version` | nullable |
 | `created_at` | UTC |
 
-Contrainte unique: `(paper_version_id, kind, stored_blob_id)`. Un texte dérivé référence son PDF parent, son extracteur et sa version.
+Contrainte unique: `(paper_version_id, kind, stored_blob_id)`. Un artefact `metadata` référence obligatoirement une `version_observation` et son blob contient exactement le JSON bibliographique canonique dont `normalized_sha256` est l'empreinte. Les passages de titre et de résumé utilisent cet artefact comme autorité. Un texte dérivé référence son PDF parent, son extracteur et sa version.
 
 ## Collections
 
@@ -290,7 +300,7 @@ La migration d'identité ajoute les observations de provider, affiliations obser
 
 ## Index de recherche
 
-La base FTS séparée contient `documents`, `passages`, `passages_fts` et `index_meta`. Elle stocke la révision catalogue source, le schéma de chunk, sa génération et son propre SHA-256 dans un reçu privé.
+La base FTS séparée contient `documents`, `passages`, `passages_fts` et `index_meta`. `index_meta` est le reçu privé autoritaire et stocke la révision catalogue source, le schéma de chunk, la génération, les compteurs et l'empreinte logique du contenu indexé. La base candidate est le seul fichier publié par remplacement atomique; aucun sidecar n'est requis pour valider une génération.
 
 La base FTS n'est pas l'autorité des claims d'analyse et ne porte aucune mutation corpus.
 

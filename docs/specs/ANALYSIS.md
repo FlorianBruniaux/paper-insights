@@ -65,7 +65,14 @@ Modifier un composant invalide la clé.
 
 ## Gate humaine
 
-Le batch reste désactivé tant qu'un fichier d'évaluation signé ne contient pas 20 analyses sur au moins quatre types de papiers. Toute claim publiée sans preuve est un P0. Au moins 18 analyses sur 20 doivent être jugées utiles et fidèles.
+Le batch reste désactivé tant que les deux artefacts suivants ne sont pas présents, valides et cohérents:
+
+- `tests/benchmarks/analysis_reviews.jsonl`, avec exactement une ligne JSON fermée `analysis-review-v1` par analyse: `analysis_id`, `paper_version_id`, `artifact_sha256`, `paper_type`, `reviewer_id`, `reviewed_at`, booléens `useful` et `faithful`, `unsupported_claim_ids` et note nullable;
+- `tests/benchmarks/analysis_acceptance.json`, objet fermé `analysis-acceptance-v1` avec `dataset_sha256`, `reviewed_count`, `paper_type_count`, `useful_and_faithful_count`, `unsupported_published_claims`, `approved_by`, `approved_at` et `attestation_sha256`.
+
+`dataset_sha256` couvre les octets exacts du JSONL. `attestation_sha256` couvre le JSON canonique d'acceptation sans ce champ. Le validateur recalcule les compteurs et les deux empreintes; une donnée manquante, dupliquée, inconnue ou incohérente bloque le gate. Aucun agent ne remplit `reviewer_id`, `approved_by` ou les verdicts à la place d'un humain.
+
+Le gate exige 20 analyses distinctes sur au moins quatre types de papiers, zéro claim publiée sans preuve et au moins 18 analyses utiles et fidèles. Toute claim publiée sans preuve est un P0.
 
 ## Tests d'acceptation
 
@@ -75,4 +82,5 @@ Le batch reste désactivé tant qu'un fichier d'évaluation signé ne contient p
 - claim sans preuve impossible à publier;
 - clé de cache modifiée par chaque composant;
 - ancien cache valide préservé après un retry invalide;
+- gate humaine absente, incomplète ou incohérente qui échoue fermé;
 - transport LLM simulé, aucun réseau réel.

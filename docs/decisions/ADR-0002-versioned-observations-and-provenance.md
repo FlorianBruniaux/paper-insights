@@ -15,13 +15,15 @@ Une oeuvre peut recevoir plusieurs versions et une même version peut être obse
 - auteurs ordonnés et catégories référencent `version_observation_id`.
 - `stored_blobs`, `source_snapshots` et `snapshot_records` conservent la page brute multi-papiers et ses ordinals.
 - chaque record normalisé ou échoué reste relié à son snapshot et son ordinal.
-- `paper_identifiers`, `version_identifiers` et `author_identifiers` remplacent l'association polymorphe et utilisent des FKs réelles.
+- `paper_identifiers`, `version_identifiers` et `author_identifiers` remplacent l'association polymorphe et utilisent des FKs réelles;
+- des tables de preuve séparées conservent chaque observation d'un identifiant canonique sans dupliquer son association;
+- chaque observation bibliographique possède un artefact `metadata` adressé par l'empreinte de son JSON canonique.
 - les passages utilisés comme preuves d'analyse sont persistés dans le catalogue; FTS reste une projection.
 
 ## Conséquences
 
 - une correction de métadonnées crée une observation au lieu d'écraser l'ancienne;
-- une nouvelle récupération identique ajoute de la provenance sans dupliquer l'observation;
+- une nouvelle récupération identique ajoute une capture datée et sa provenance sans dupliquer le blob ni l'observation;
 - une réponse brute n'est ni attribuée à un seul papier, ni copiée par papier;
 - le schéma possède plus de relations et les citations doivent sélectionner une observation exacte;
 - les migrations et repositories doivent préserver `NULL` pour un champ absent.

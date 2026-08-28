@@ -29,11 +29,13 @@ Le dépôt contient le socle documentaire et la configuration des agents. L'inge
 ## Architecture cible
 
 ```text
-providers -> ingestion -> catalog.sqlite3 -> search.sqlite3 -> CLI / MCP
-                      \-> artifacts       \-> analyses
+providers -> application services -> domain + ports
+adapters  -> application ports
+CLI / MCP -> application services
+bootstrap -> interfaces + services + adapters
 ```
 
-Le catalogue relationnel conserve les entités et la provenance. Un index FTS5 séparé contient des passages reproductibles. Les analyses référencent les identifiants de passages et l'empreinte de l'artefact utilisé.
+Cette vue simplifiée montre la direction des dépendances, pas un pipeline d'import. Le catalogue relationnel conserve les entités et la provenance. Un index FTS5 séparé contient des passages reproductibles. Les analyses référencent les identifiants de passages et l'empreinte de l'artefact utilisé.
 
 ## Documents de référence
 
@@ -45,6 +47,7 @@ Le catalogue relationnel conserve les entités et la provenance. Un index FTS5 s
 | [Spécification produit](docs/specs/PRODUCT.md) | Cas d'usage et exigences |
 | [Modèle de données](docs/specs/DATA-MODEL.md) | Entités, identifiants et provenance |
 | [Ingestion](docs/specs/INGESTION.md) | Découverte, reprise et idempotence |
+| [Ports d'application](docs/specs/PORTS.md) | Signatures synchrones et DTO gelés |
 | [Recherche et MCP](docs/specs/SEARCH-AND-MCP.md) | FTS5, citations et outils MCP |
 | [Watchlists](docs/specs/WATCHLISTS.md) | Curseurs, overlap, finalisation et digests |
 | [Analyse](docs/specs/ANALYSIS.md) | Texte intégral, passages, cache, claims et preuves |

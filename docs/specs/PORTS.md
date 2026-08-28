@@ -1,0 +1,207 @@
+# Spécification des ports d'application
+
+## Statut et règles communes
+
+Ce document fige les noms, directions et signatures publiques de Gate 0. Les modules Python de WP-01 doivent les exprimer avec `Protocol`, des dataclasses immuables et des types du domaine. Un adapter peut ajouter des méthodes privées, mais ne modifie pas ce contrat sans décision de l'intégrateur et mise à jour des specs.
+
+Tous les ports sont synchrones. Aucun type SQLAlchemy, objet HTTP, chemin implicite, modèle Pydantic ou `Any` ne traverse la frontière. Les iterables retournés sont matérialisés en tuples avant la fermeture du contexte qui les possède.
+
+## Plateforme
+
+```python
+class Clock(Protocol):
+    def now(self) -> datetime: ...
+
+class IdGenerator(Protocol):
+    def new(self) -> UUID: ...
+```
+
+`Clock.now()` rend un `datetime` UTC conscient. `IdGenerator.new()` rend un UUIDv7.
+
+## Acquisition et artefacts
+
+```python
+class DiscoveryProvider(Protocol):
+    source_id: SourceId
+
+    def discover(self, query: DiscoveryQuery) -> DiscoveryBatch: ...
+
+class BlobStore(Protocol):
+    def put(self, blob: BlobWrite) -> StoredBlobRef: ...
+    def open_verified(self, ref: StoredBlobRef) -> BinaryIO: ...
+    def inspect(self, ref: StoredBlobRef) -> BlobInspection: ...
+```
+
+`discover` est le seul appel externe de la préparation. `BlobStore.put` publie par contenu et peut réutiliser un blob existant. `open_verified` refuse une empreinte ou un chemin invalide. `inspect` est read-only.
+
+## Catalogue
+
+```python
+class CatalogUnitOfWorkFactory(Protocol):
+    def begin(self) -> CatalogUnitOfWork: ...
+
+class CatalogUnitOfWork(Protocol):
+    corpus: CorpusRepository
+    ingestion: IngestionRepository
+    collections: CollectionRepository
+
+    def __enter__(self) -> CatalogUnitOfWork: ...
+    def __exit__(self, exc_type: object, exc: object, tb: object) -> bool: ...
+    def commit(self) -> None: ...
+    def rollback(self) -> None: ...
+
+class CorpusRepository(Protocol):
+    def resolve_paper(self, selector: PaperSelector) -> PaperIdentity | None: ...
+    def record_observation(self, command: RecordObservation) -> RecordObservationResult: ...
+
+class IngestionRepository(Protocol):
+    def attach_prepared_run(self, command: AttachPreparedRun) -> IngestionRunRef: ...
+    def record_item(self, command: RecordIngestionItem) -> IngestionItemRef: ...
+    def finalize_run(self, run_id: RunId) -> IngestionSummary: ...
+
+class CollectionRepository(Protocol):
+    def create(self, command: CreateCollection) -> CollectionView: ...
+    def add(self, command: AddCollectionPaper) -> CollectionView: ...
+    def remove(self, command: RemoveCollectionPaper) -> CollectionView: ...
+
+class CatalogReader(Protocol):
+    def snapshot(self) -> CatalogSnapshot: ...
+
+class CatalogSnapshot(Protocol):
+    revision: CatalogRevision
+
+    def __enter__(self) -> CatalogSnapshot: ...
+    def __exit__(self, exc_type: object, exc: object, tb: object) -> bool: ...
+    def get_paper(self, selector: PaperSelector) -> PaperView | None: ...
+    def list_index_documents(self) -> tuple[IndexDocument, ...]: ...
+    def list_collections(self) -> tuple[CollectionView, ...]: ...
+    def get_citation_input(self, selector: CitationSelector) -> CitationInput | None: ...
+
+class CatalogRevisionGuard(Protocol):
+    def hold_if_current(self, expected: CatalogRevision) -> CatalogRevisionLease: ...
+
+class CatalogRevisionLease(Protocol):
+    revision: CatalogRevision
+
+    def __enter__(self) -> CatalogRevisionLease: ...
+    def __exit__(self, exc_type: object, exc: object, tb: object) -> bool: ...
+```
+
+Le factory ouvre une transaction d'écriture courte. `commit` vérifie les invariants puis incrémente au plus une fois la révision si une mutation visible existe. `CatalogSnapshot` est une lecture cohérente et fermée. `hold_if_current` prend la garde d'écriture avant la comparaison et la conserve jusqu'à la sortie du contexte.
+
+## Recherche, collections et citations
+
+```python
+class SearchIndexBuilder(Protocol):
+    def build_candidate(self, request: IndexBuildRequest) -> IndexCandidate: ...
+    def publish(self, candidate: IndexCandidate, lease: CatalogRevisionLease) -> PublishedIndex: ...
+    def discard(self, candidate: IndexCandidate) -> None: ...
+
+class SearchIndexReader(Protocol):
+    def search_papers(self, query: PaperSearchQuery) -> PaperSearchResult: ...
+    def search_passages(self, query: PassageSearchQuery) -> PassageSearchResult: ...
+    def get_passage(self, passage_id: PassageId) -> PassageView | None: ...
+
+class CitationRenderer(Protocol):
+    def render(self, citation: CitationInput, format: CitationFormat) -> CitationResult: ...
+```
+
+`IndexCandidate` contient le chemin explicite, la révision catalogue, la génération et le reçu `index_meta` attendu. `publish` accepte uniquement une lease courante. Les lectures rendent couverture, révisions et troncature dans leurs DTO. `CitationRenderer` ne reçoit qu'une observation exacte avec sa provenance.
+
+Les mutations de collections utilisent `CollectionRepository` dans un `CatalogUnitOfWork`; aucun port de mutation n'est injecté dans MCP.
+
+## Veille
+
+```python
+class WatchlistUnitOfWorkFactory(Protocol):
+    def begin(self) -> WatchlistUnitOfWork: ...
+
+class WatchlistUnitOfWork(Protocol):
+    def load(self, slug: WatchlistSlug) -> WatchlistState | None: ...
+    def finalize(self, command: FinalizeWatchlistRun) -> WatchlistRunResult: ...
+    def commit(self) -> None: ...
+    def rollback(self) -> None: ...
+```
+
+La finalisation contient la version d'état attendue et refuse un conflit. La confirmation `--yes` appartient au service CLI avant l'ouverture de cette unité de travail.
+
+## Texte intégral et analyse
+
+```python
+class FullTextProvider(Protocol):
+    def acquire(self, request: FullTextRequest) -> FullTextAcquisition: ...
+
+class TextExtractor(Protocol):
+    name: str
+    version: str
+
+    def extract(self, artifact: VerifiedArtifact) -> ExtractedText: ...
+
+class AnalysisBackend(Protocol):
+    provider: str
+    model: str
+
+    def analyze(self, request: AnalysisRequest) -> AnalysisResponse: ...
+
+class AnalysisUnitOfWorkFactory(Protocol):
+    def begin(self) -> AnalysisUnitOfWork: ...
+
+class AnalysisUnitOfWork(Protocol):
+    def find_complete(self, key: AnalysisCacheKey) -> AnalysisResult | None: ...
+    def record_attempt(self, attempt: AnalysisAttempt) -> AnalysisAttemptRef: ...
+    def publish_complete(self, command: PublishAnalysis) -> AnalysisResult: ...
+    def commit(self) -> None: ...
+    def rollback(self) -> None: ...
+```
+
+`AnalysisCacheKey` contient version du papier, SHA-256 de l'artefact, IDs ordonnés des passages, version de chunk, empreinte du prompt, provider, modèle, paramètres et version du schéma de résultat. `publish_complete` vérifie les preuves avant de remplacer une entrée de cache.
+
+## Identité
+
+```python
+class IdentityProvider(Protocol):
+    source_id: SourceId
+
+    def observe(self, query: IdentityQuery) -> IdentityObservationBatch: ...
+
+class IdentityUnitOfWorkFactory(Protocol):
+    def begin(self) -> IdentityUnitOfWork: ...
+
+class IdentityUnitOfWork(Protocol):
+    def record_observations(self, batch: IdentityObservationBatch) -> tuple[IdentityObservationRef, ...]: ...
+    def apply(self, decision: IdentityDecision) -> IdentityState: ...
+    def reverse(self, command: ReverseIdentityDecision) -> IdentityState: ...
+    def commit(self) -> None: ...
+    def rollback(self) -> None: ...
+```
+
+Une décision contient l'acteur, les preuves et la version d'état attendue. `reverse` restaure les read models fonctionnels concernés et ajoute un événement d'audit inverse; il ne supprime pas l'historique append-only.
+
+## Fédération
+
+```python
+class FederatedCorpus(Protocol):
+    corpus_id: CorpusId
+
+    def capabilities(self) -> CorpusCapabilities: ...
+    def search(self, query: FederatedSearchQuery) -> NativeCorpusResult: ...
+    def resolve_evidence(self, ref: EvidenceRef) -> EvidenceItem | None: ...
+
+class EvidenceBundleWriter(Protocol):
+    def write(self, bundle: EvidenceBundle) -> EvidenceBundleReceipt: ...
+```
+
+Chaque corpus garde ses scores natifs. Une erreur d'un corpus devient une couverture partielle et ne supprime pas les résultats valides des autres. Le writer produit un bundle privé, borné, avec manifeste et empreintes.
+
+## DTO gelés à Gate 0
+
+WP-01 fournit au minimum les DTO immuables suivants, avec égalité structurelle et validation à la construction:
+
+- acquisition: `DiscoveryQuery`, `DiscoveryPage`, `DiscoveryRecord`, `DiscoveryIssue`, `DiscoveryBatch`, `DiscoveryPreview`, `PreparedDiscovery`;
+- corpus: IDs typés, `PaperSelector`, `VersionSelector`, `PaperIdentity`, `ObservedPaperVersion`, `VersionObservation`, `ArtifactRef`;
+- ingestion: `AttachPreparedRun`, `RecordObservation`, `RecordObservationResult`, `IngestionSummary`;
+- retrieval: `CatalogRevision`, `IndexDocument`, `IndexBuildRequest`, `IndexCandidate`, `PaperSearchQuery`, `PaperSearchResult`, `PassageSearchQuery`, `PassageSearchResult`, `PassageView`;
+- citation et collections: `CitationSelector`, `CitationInput`, `CitationFormat`, `CitationResult`, commandes et vues de collection;
+- gates ultérieures: DTO de veille, texte, analyse, identité et fédération nommés dans les signatures ci-dessus.
+
+Les DTO des gates ultérieures peuvent rester des contrats documentaires jusqu'à leur WP. Le code de WP-01 implémente les types fondamentaux et les ports consommés par les vagues 1 et 2, sans prétendre livrer les interfaces utilisateur correspondantes.

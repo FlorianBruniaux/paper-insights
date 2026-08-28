@@ -29,7 +29,7 @@ Chaque merge, split ou confirmation conserve:
 - opération inverse complète;
 - événement inversé nullable.
 
-Une décision en conflit avec la version courante est refusée. Reverser une fusion restaure identifiants, relations et états antérieurs sans perte.
+Une décision en conflit avec la version courante est refusée. Reverser une fusion restaure sans perte les identifiants, relations et read models fonctionnels antérieurs. Le journal append-only conserve la décision initiale et l'événement inverse.
 
 ## Affiliation
 
@@ -50,7 +50,7 @@ Une affiliation reste une observation rattachée à sa source et sa date. Elle n
 - deux homonymes restent distincts;
 - un ORCID vérifié produit un candidat ou une fusion selon la règle approuvée;
 - preuves contradictoires bloquent la fusion;
-- merge puis reverse restaure l'état byte-for-byte des read models;
+- merge puis reverse restaure l'état fonctionnel des read models, hors événements d'audit append-only;
 - suggestion LinkedIn impossible à passer au port de confirmation;
 - URL non confirmée impossible à persister comme profil;
 - fixtures OpenAlex/ORCID locales, aucun réseau réel.

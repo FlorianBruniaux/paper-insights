@@ -20,6 +20,8 @@ Le code utilise `domain`, `application`, `adapters`, `interfaces` et une racine 
 - les read models transportent provenance, couverture, révision et troncature;
 - un seul owner contrôle modèles SQLAlchemy et chaîne Alembic.
 
+Les signatures publiques et les DTO autorisés à traverser ces frontières sont définis dans [PORTS.md](../specs/PORTS.md).
+
 Les tests AST refusent les imports vers l'extérieur depuis `domain` et `application`, ainsi que la construction de clients externes au niveau module.
 
 ## Conséquences

@@ -11,13 +11,14 @@ Une interface `preview(query)` suivie de `iter_records(query)` peut interroger d
 
 - le provider expose `discover(query) -> DiscoveryBatch`;
 - `PrepareDiscovery` produit un `PreparedDiscovery` immuable avec batch, preview, digest et expiration;
-- le digest couvre requête canonique, versions sélectionnées et SHA-256 ordonnés des pages;
+- le digest couvre requête canonique, versions sélectionnées et, pour chaque page ordonnée, `capture_id` UUIDv7, SHA-256, date de récupération et empreinte de requête;
 - l'exécution consomme ce manifeste exact et ne rappelle jamais le provider;
 - les blobs sont publiés hors transaction SQL par fichier sibling privé, `fsync`, validation puis `os.replace`;
 - un échec d'attachement peut laisser un blob orphelin signalé par `doctor`;
+- l'attachement de toutes les pages et records avec la création de la run forme une transaction catalogue unique;
 - `doctor` reste read-only et la réparation est une commande distincte confirmée;
 - `catalog_meta.revision` augmente une fois par transaction métier visible;
-- la publication FTS garde un `BEGIN IMMEDIATE` depuis le contrôle final de révision jusqu'au remplacement atomique.
+- la publication FTS garde un `BEGIN IMMEDIATE` depuis le contrôle final de révision jusqu'au remplacement atomique de l'unique base auto-descriptive dont `index_meta` est le reçu autoritaire.
 
 ## Conséquences
 

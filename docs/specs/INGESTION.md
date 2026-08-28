@@ -14,7 +14,7 @@ class DiscoveryProvider(Protocol):
 `DiscoveryBatch` contient:
 
 - la source et la requête canonique;
-- des `DiscoveryPage` ordonnées avec payload brut borné, SHA-256, type MIME, date de récupération, empreinte de requête et curseur suivant;
+- des `DiscoveryPage` ordonnées avec `capture_id` UUIDv7, payload brut borné, SHA-256, type MIME, date de récupération, empreinte de requête et curseur suivant;
 - des records ordonnés, chacun relié à son ordinal de page et de record;
 - les `ObservedPaperVersion` normalisés;
 - les issues de collecte ou d'exclusion.
@@ -47,11 +47,19 @@ Le digest est le SHA-256 UTF-8 d'un JSON canonique avec clés triées, séparate
   "source_id": "arxiv",
   "query": {},
   "selected_source_versions": [],
-  "page_sha256": []
+  "pages": [
+    {
+      "capture_id": "<uuidv7>",
+      "page_ordinal": 0,
+      "request_fingerprint": "<64 hex>",
+      "retrieved_at": "2026-08-29T00:00:00Z",
+      "sha256": "<64 hex>"
+    }
+  ]
 }
 ```
 
-`query` est l'objet canonique fermé. Les versions sélectionnées conservent l'ordre déterministe de la source après déduplication de pagination. Les SHA-256 de pages conservent l'ordre des pages. Modifier requête, sélection, ordre, version ou payload change le digest.
+`query` est l'objet canonique fermé. Les versions sélectionnées conservent l'ordre déterministe de la source après déduplication de pagination. Les pages conservent leur ordre, leur `capture_id`, leur empreinte de requête, leur date de récupération et leur SHA-256. Modifier requête, sélection, ordre, version, capture ou payload change le digest. Rejouer le même objet préparé conserve le digest; une nouvelle collecte du même payload produit un `capture_id` distinct.
 
 `PreparedDiscovery` conserve le batch exact, l'aperçu, le digest, `prepared_at` et `expires_at`. Le service vérifie la cohérence source/requête, le mapping total page-record et le digest avant toute mutation.
 
@@ -67,14 +75,17 @@ Après confirmation, l'exécution consomme le `PreparedDiscovery` reçu. Elle ne
 
 ## Publication des pages et provenance
 
-Pour chaque page confirmée:
+Pour toutes les pages confirmées:
 
 1. publier le payload comme `stored_blob` content-addressed;
-2. attacher un `source_snapshot` au blob avec digest, page, requête et date;
-3. créer les `snapshot_records` ordonnés;
-4. seulement ensuite ouvrir les transactions courtes par record.
+2. publier pour chaque observation sélectionnée le JSON bibliographique canonique comme blob `metadata` content-addressed;
+3. ouvrir une transaction `BEGIN IMMEDIATE` unique;
+4. attacher tous les `source_snapshots` et leurs `snapshot_records` ordonnés;
+5. créer la run liée au même `prepared_digest`;
+6. incrémenter la révision catalogue une fois et valider;
+7. seulement ensuite ouvrir les transactions courtes par record.
 
-Le blob est publié hors transaction SQL. Un échec avant `os.replace` ne laisse aucun fichier final. Un échec SQL après publication laisse un blob orphelin que `doctor` signale sans le supprimer.
+Les blobs sont publiés hors transaction SQL. Un échec avant `os.replace` ne laisse aucun fichier final. Un échec SQL après publication laisse seulement des blobs orphelins que `doctor` signale sans les supprimer. Aucun snapshot ni record partiel n'est visible. Les tests d'injection de panne couvrent une interruption avant publication, après publication des blobs et avant le commit SQL.
 
 Une page multi-papiers reste un snapshot unique. Elle n'est ni copiée, ni enregistrée comme artefact de chaque papier.
 
@@ -86,7 +97,7 @@ Une run est créée avant le premier item. Chaque item utilise une transaction `
 2. retrouve ou crée la version source complète;
 3. compare le hash bibliographique normalisé;
 4. crée une observation immuable si nécessaire;
-5. relie snapshot, ordinal, auteurs, catégories et identifiants;
+5. relie snapshot, ordinal, auteurs, catégories, identifiants et artefact `metadata` à l'observation exacte;
 6. enregistre un `ingestion_run_item` avec un outcome unique;
 7. incrémente la révision catalogue une fois si la transaction contient une mutation visible.
 
@@ -167,7 +178,7 @@ Sans `--yes`, elle prévisualise les runs concernées et termine avec le code `3
 
 ## Watchlists
 
-Une watchlist prépare puis exécute le même contrat avec fenêtre de recouvrement. La déduplication repose sur les identifiants papier/version et les hashes normalisés, jamais sur le curseur seul. Le curseur candidat devient validé uniquement dans une finalisation réussie décrite dans [WATCHLISTS.md](WATCHLISTS.md).
+Une watchlist prépare puis exécute le même contrat avec fenêtre de recouvrement. Chaque invocation de `watch run` exige `--yes`; aucune autorisation persistante n'est déduite du scheduler ou de la définition de watchlist. Sans confirmation, le manifeste est affiché et le code `3` est rendu sans mutation. La déduplication repose sur les identifiants papier/version et les hashes normalisés, jamais sur le curseur seul. Le curseur candidat devient validé uniquement dans une finalisation réussie décrite dans [WATCHLISTS.md](WATCHLISTS.md).
 
 ## Erreurs fermées initiales
 

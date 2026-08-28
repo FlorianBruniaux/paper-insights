@@ -34,10 +34,10 @@
 | Corpus | papers, versions, observed authors, identifiers, collections | `CatalogReader`, `CorpusRepository` |
 | Retrieval | index generations, documents, passages, BM25 search | `SearchIndexBuilder`, `SearchIndexReader` |
 | Citations | BibTeX, Markdown and CSL-JSON rendering | `CitationRenderer` |
-| Monitoring | watchlists, overlap windows, cursors and digests | `WatchlistRepository` |
-| Analysis | PDF acquisition, extraction, chunking, LLM results and claims | `TextExtractor`, `AnalysisBackend` |
-| Identity | OpenAlex/ORCID observations and reversible identity decisions | `IdentityProvider`, `IdentityRepository` |
-| Federation | independent queries and partial-coverage aggregation | `FederatedCorpus` |
+| Monitoring | watchlists, overlap windows, cursors and digests | `WatchlistUnitOfWorkFactory` |
+| Analysis | PDF acquisition, extraction, chunking, LLM results and claims | `FullTextProvider`, `TextExtractor`, `AnalysisBackend`, `AnalysisUnitOfWorkFactory` |
+| Identity | OpenAlex/ORCID observations and reversible identity decisions | `IdentityProvider`, `IdentityUnitOfWorkFactory` |
+| Federation | independent queries and partial-coverage aggregation | `FederatedCorpus`, `EvidenceBundleWriter` |
 | Delivery | Typer CLI and read-only MCP | application services only |
 
 Required package shape:
@@ -78,6 +78,7 @@ Create immutable dataclasses and protocols matching these signatures. Pydantic i
 ```python
 @dataclass(frozen=True, slots=True)
 class DiscoveryPage:
+    capture_id: UUID
     records: tuple[SourceRecord, ...]
     raw_payload: bytes
     media_type: str
@@ -100,6 +101,7 @@ class PreparedDiscovery:
     batch: DiscoveryBatch
     preview: DiscoveryPreview
     digest: str
+    prepared_at: datetime
     expires_at: datetime
 
 
@@ -110,38 +112,43 @@ class DiscoveryProvider(Protocol):
 
 
 class CatalogReader(Protocol):
-    def open_snapshot(self) -> ContextManager[CatalogSnapshot]: ...
-    def current_revision(self) -> int: ...
+    def snapshot(self) -> CatalogSnapshot: ...
 
 
 class CatalogRevisionGuard(Protocol):
-    def hold_if_current(self, expected_revision: int) -> ContextManager[None]: ...
+    def hold_if_current(self, expected: CatalogRevision) -> CatalogRevisionLease: ...
+
+
+class CatalogUnitOfWorkFactory(Protocol):
+    def begin(self) -> CatalogUnitOfWork: ...
 
 
 class CatalogUnitOfWork(Protocol):
-    runs: RunRepository
     corpus: CorpusRepository
-    provenance: ProvenanceRepository
+    ingestion: IngestionRepository
+    collections: CollectionRepository
 
     def commit(self) -> None: ...
     def rollback(self) -> None: ...
 
 
 class SearchIndexReader(Protocol):
-    def search_papers(self, query: SearchQuery) -> PaperSearchResult: ...
-    def search_passages(self, query: SearchQuery) -> PassageSearchResult: ...
-    def get_passage(self, passage_id: str) -> PassageView | None: ...
+    def search_papers(self, query: PaperSearchQuery) -> PaperSearchResult: ...
+    def search_passages(self, query: PassageSearchQuery) -> PassageSearchResult: ...
+    def get_passage(self, passage_id: PassageId) -> PassageView | None: ...
 
 
 class FederatedCorpus(Protocol):
-    corpus_id: str
+    corpus_id: CorpusId
 
-    def search(self, query: FederatedQuery) -> CorpusSearchResult: ...
+    def capabilities(self) -> CorpusCapabilities: ...
+    def search(self, query: FederatedSearchQuery) -> NativeCorpusResult: ...
+    def resolve_evidence(self, ref: EvidenceRef) -> EvidenceItem | None: ...
 ```
 
 `PaperSearchResult` and `PassageSearchResult` carry hits, coverage, catalogue and index revisions, `truncated`, `returned` and `available`. Every normalized observation carries page and record ordinals. The ordered `DiscoveryBatch.records` view must equal the observations embedded in its pages.
 
-Gate 0 also freezes synchronous ports for `SearchIndexBuilder`, `CitationRenderer`, `WatchlistUnitOfWorkFactory`, `FullTextProvider`, `TextExtractor`, `AnalysisUnitOfWorkFactory`, `IdentityUnitOfWorkFactory` and `EvidenceBundleWriter`. Workers may add implementations but may not change these contracts.
+Gate 0 also freezes synchronous ports for `SearchIndexBuilder`, `CitationRenderer`, `WatchlistUnitOfWorkFactory`, `FullTextProvider`, `TextExtractor`, `AnalysisUnitOfWorkFactory`, `IdentityUnitOfWorkFactory` and `EvidenceBundleWriter`. Their complete signatures and DTO names live in `docs/specs/PORTS.md`. Workers may add implementations but may not change these contracts.
 
 Run counters have exactly these meanings:
 
@@ -203,6 +210,7 @@ Wave 0 is sequential because all later packages consume its schema and ports.
 - Modify: `docs/specs/INGESTION.md`
 - Modify: `docs/specs/SEARCH-AND-MCP.md`
 - Modify: `docs/specs/PRODUCT.md`
+- Create: `docs/specs/PORTS.md`
 - Modify: `docs/ROADMAP.md`
 - Create: `docs/specs/WATCHLISTS.md`
 - Create: `docs/specs/ANALYSIS.md`
@@ -226,6 +234,7 @@ Wave 0 is sequential because all later packages consume its schema and ports.
 - [ ] Keep `doctor` read-only and specify explicit repair.
 - [ ] Define SQLite writer locking, WAL, `busy_timeout`, `foreign_keys`, `synchronous=FULL`, snapshot reads and crash recovery.
 - [ ] Specify all six MCP read models and all three citation formats.
+- [ ] Freeze every public synchronous port signature and its boundary DTO names in `docs/specs/PORTS.md`.
 - [ ] Mark the old vertical-slice plan as superseded until Gate 0.
 
 **Verification:**
@@ -315,7 +324,7 @@ Commit: `feat: freeze domain and application ports`
 - Create: `tests/catalog/test_uow.py`
 - Create: `tests/catalog/test_snapshot.py`
 
-**Required schema:** `catalog_meta`, `sources`, `stored_blobs`, `source_snapshots`, `snapshot_records`, `ingestion_runs`, `ingestion_run_items`, `collection_errors`, `papers`, `paper_versions`, `version_observations`, `paper_identifiers`, `version_identifiers`, `authors`, `author_identifiers`, `paper_authors`, `paper_version_categories`, `artifacts`, `collections`, `collection_papers`.
+**Required schema:** `catalog_meta`, `sources`, `stored_blobs`, `source_snapshots`, `snapshot_records`, `ingestion_runs`, `ingestion_run_items`, `collection_errors`, `papers`, `paper_versions`, `version_observations`, `paper_identifiers`, `paper_identifier_evidence`, `version_identifiers`, `version_identifier_evidence`, `authors`, `author_identifiers`, `author_identifier_evidence`, `paper_authors`, `paper_version_categories`, `artifacts`, `collections`, `collection_papers`.
 
 **Steps:**
 
@@ -432,9 +441,10 @@ Commit: `feat: add installable local platform foundation`
 **Steps:**
 
 - [ ] Prove preview makes zero filesystem or catalogue mutation.
-- [ ] Digest canonical query, selected source version IDs and every raw-page SHA-256.
+- [ ] Digest canonical query, selected source version IDs and, for every ordered raw page, capture UUIDv7, SHA-256, retrieval timestamp and request fingerprint.
 - [ ] Reject expired or mismatched confirmation before opening a run.
-- [ ] Publish blobs outside SQL transactions, then attach snapshots and process one record per short transaction.
+- [ ] Publish raw and canonical metadata blobs outside SQL transactions, then attach all snapshots and records with run creation in one transaction before processing one record per short transaction.
+- [ ] Inject crashes before blob replace, after blob publication and before the snapshot/run commit; prove no partial snapshot graph becomes visible.
 - [ ] Record exact success/failure counters and make a repeated batch unchanged.
 - [ ] Implement explicit `RepairInterruptedRuns`, never invoked by doctor.
 
@@ -466,8 +476,8 @@ Commit: `feat: add confirmed idempotent ingestion`
 
 **Steps:**
 
-- [ ] Generate deterministic title and abstract passages from a coherent catalogue snapshot.
-- [ ] Build a sibling FTS database and receipt, run `quick_check`, verify counts and recheck catalogue revision.
+- [ ] Generate deterministic title and abstract passages from each observation's canonical `metadata` artifact in a coherent catalogue snapshot.
+- [ ] Build one sibling FTS database whose authoritative receipt is `index_meta`, run `quick_check`, verify counts and recheck catalogue revision.
 - [ ] Abandon a stale build and preserve the previously published index after any injected crash.
 - [ ] Open reads with URI `mode=ro`, enable `query_only` and sanitize hostile FTS input.
 - [ ] Return stable IDs, raw BM25 score, rank, bounded excerpt, coverage and index revision.
@@ -519,11 +529,16 @@ Commit: `feat: add collections and source-backed citations`
 **Files:**
 
 - Create: `src/paper_insights/interfaces/cli/ingest.py`
+- Create: `src/paper_insights/interfaces/cli/discover.py`
 - Create: `src/paper_insights/interfaces/cli/search.py`
 - Create: `src/paper_insights/interfaces/cli/index.py`
 - Create: `src/paper_insights/interfaces/cli/citations.py`
+- Create: `src/paper_insights/interfaces/cli/collections.py`
 - Create: `src/paper_insights/interfaces/cli/repair.py`
+- Modify: `src/paper_insights/interfaces/cli/app.py`
 - Create: `tests/integration/test_arxiv_vertical_slice.py`
+- Create: `tests/integration/test_cli_discover.py`
+- Create: `tests/integration/test_cli_collections.py`
 
 **Acceptance:**
 
@@ -532,6 +547,7 @@ Commit: `feat: add collections and source-backed citations`
 - [ ] A v2 collected later does not overwrite v1 metadata.
 - [ ] A failed item remains linked to its run without losing prior successes.
 - [ ] Search and all citation formats resolve to the exact version and snapshot.
+- [ ] `discover` reste sans mutation et les commandes de collection couvrent create, rename, list, add et remove.
 - [ ] Every test runs with sockets disabled except explicit respx provider tests.
 
 Commit: `test: gate the offline arxiv vertical slice`
@@ -588,6 +604,7 @@ Commit: `feat: expose closed-world paper research mcp`
 **Steps:**
 
 - [ ] Store query, validated cursor, overlap window and last successful run.
+- [ ] Require `--yes` for each `watch run`, including scheduler calls; without it return code 3 and zero mutation.
 - [ ] Diff on source paper/version identifiers, not cursor position alone.
 - [ ] Deduplicate multi-category notices in one digest.
 - [ ] Advance the cursor only in successful finalization; retain the previous cursor after partial/failed runs.
@@ -644,7 +661,25 @@ Commit: `feat: add bounded fulltext extraction`
 
 ## 9. Wave 4: analysis, identity and federation in parallel
 
-Before opening the three worktrees, Worker A creates and lands `0003_analysis.py` and `0004_author_identity.py` against the same Alembic head. Once both schema contracts pass migration tests, WP-40, WP-41 and WP-42 run concurrently.
+### WP-39: Wave 4 schema and federation contract cut
+
+**Owner:** Integrator for the ADR; Worker A for both migrations. This package lands before any Wave 4 worker is dispatched.
+
+**Files:**
+
+- Create: `docs/decisions/ADR-0005-federated-corpus-contract.md` (Integrator)
+- Create: `alembic/versions/0003_analysis.py` (Worker A)
+- Create: `alembic/versions/0004_author_identity.py` (Worker A)
+- Modify: `tests/catalog/test_migrations.py` (Worker A)
+
+**Steps:**
+
+- [ ] Freeze corpus capabilities, native scores, source types, partial coverage and evidence-bundle manifest in ADR-0005.
+- [ ] Land both additive migrations against one linear Alembic head.
+- [ ] Run zero-to-head, every-upgrade, foreign-key and quick-check tests before opening Wave 4 worktrees.
+- [ ] Commit the ADR separately from Worker A's migration commit with explicit pathspecs.
+
+Once this contract cut passes, WP-40, WP-41 and WP-42 run concurrently.
 
 ### WP-40: Source-backed analysis and cache
 
@@ -652,7 +687,7 @@ Before opening the three worktrees, Worker A creates and lands `0003_analysis.py
 
 **Files:**
 
-- Create: `alembic/versions/0003_analysis.py` (Worker A)
+- Consume: `alembic/versions/0003_analysis.py` from WP-39
 - Create: `src/paper_insights/application/analysis/schemas.py`
 - Create: `src/paper_insights/application/analysis/chunking.py`
 - Create: `src/paper_insights/application/analysis/service.py`
@@ -664,23 +699,27 @@ Before opening the three worktrees, Worker A creates and lands `0003_analysis.py
 - Create: `tests/analysis/test_claim_evidence.py`
 - Create: `tests/analysis/test_cache.py`
 - Create: `tests/analysis/test_prompt_injection_boundary.py`
+- Create: `tests/analysis/test_human_gate.py`
+- Human-produced: `tests/benchmarks/analysis_reviews.jsonl`
+- Human-produced: `tests/benchmarks/analysis_acceptance.json`
 
 **Steps:**
 
 - [ ] Version chunk, prompt and result schemas; set Pydantic `extra="forbid"`.
 - [ ] Treat paper text as untrusted data and keep it outside system/developer instructions.
-- [ ] Key the cache on artifact SHA-256, chunk schema, prompt version, provider, model and request parameters.
+- [ ] Key the cache on paper version, artifact SHA-256, ordered passage IDs, chunk schema, prompt version and SHA-256, provider, model, request parameters and result schema version.
 - [ ] Store raw model stop reason and validation state.
 - [ ] Publish `complete` only when every claim references at least one existing passage.
 - [ ] Preserve a prior valid result when a retry is truncated or invalid.
+- [ ] Validate the closed human-review schemas, exact dataset SHA-256, canonical attestation SHA-256 and derived counters; fail closed when any field or human verdict is absent.
 
-**Human gate:** Review 20 analyses across at least four paper types. Each unsupported claim is a P0 failure. At least 18 of 20 must be rated useful and faithful before batch mode is enabled.
+**Human gate:** A human reviews 20 analyses across at least four paper types in `analysis_reviews.jsonl` and signs `analysis_acceptance.json` as defined in `docs/specs/ANALYSIS.md`. Each unsupported claim is a P0 failure. At least 18 of 20 must be rated useful and faithful before batch mode is enabled. Agents must not invent or prefill reviewer identities, approvals or verdicts.
 
 **Verification:**
 
 Run: `uv run pytest --disable-socket tests/analysis -v`
 
-Expected: automated tests PASS; batch mode remains disabled until the human evaluation file is signed.
+Expected: automated tests PASS; batch mode remains disabled until both human evaluation artifacts are present, valid and consistent.
 
 Commit: `feat: add source-backed paper analysis`
 
@@ -690,7 +729,7 @@ Commit: `feat: add source-backed paper analysis`
 
 **Files:**
 
-- Create: `alembic/versions/0004_author_identity.py` (Worker A)
+- Consume: `alembic/versions/0004_author_identity.py` from WP-39
 - Create: `src/paper_insights/application/identity/enrich.py`
 - Create: `src/paper_insights/application/identity/matching.py`
 - Create: `src/paper_insights/application/identity/decisions.py`
@@ -758,7 +797,7 @@ Commit: `feat: add provenance-preserving federated research`
 ### Gate 4 acceptance
 
 - [ ] Every published analysis claim resolves to a stored passage.
-- [ ] Human analysis benchmark is signed before batch processing is enabled.
+- [ ] Human analysis review and acceptance artifacts pass their closed-schema, checksum, attestation and threshold validation before batch processing is enabled.
 - [ ] Author merges are evidence-backed and reversible; LinkedIn remains human-only.
 - [ ] Federation retains native authority and explicit partial coverage.
 - [ ] Integrator commits `test: gate analysis identity and federation`.

@@ -23,10 +23,12 @@ Les runs de watchlist référencent une `ingestion_run`, le curseur de départ, 
 1. Lire la watchlist et son curseur validé dans un snapshot cohérent.
 2. Reculer la fenêtre de `overlap_seconds` sans modifier le curseur stocké.
 3. Appeler `discover()` puis préparer le manifeste exact.
-4. Exécuter l'ingestion confirmée avec les mêmes snapshots et records.
-5. Différencier nouveautés à partir des identifiants papier/version et hashes normalisés, jamais du curseur seul.
-6. Construire un digest candidat déterministe.
-7. Dans une transaction finale, vérifier la version d'état attendue, valider le curseur candidat, relier la run et mettre à jour `last_success_at`.
+4. Exiger `--yes` pour cette exécution précise; aucune autorisation persistante n'est stockée ou déduite du scheduler.
+5. Sans confirmation, afficher le manifeste et terminer avec le code `3` sans mutation.
+6. Exécuter l'ingestion confirmée avec les mêmes snapshots et records.
+7. Différencier nouveautés à partir des identifiants papier/version et hashes normalisés, jamais du curseur seul.
+8. Construire un digest candidat déterministe.
+9. Dans une transaction finale, vérifier la version d'état attendue, valider le curseur candidat, relier la run et mettre à jour `last_success_at`.
 
 Une run `partial` ou `failed` conserve le curseur validé précédent. Une interruption avant finalisation produit le même effet. Deux exécutions identiques donnent zéro nouveauté à la seconde.
 
@@ -68,5 +70,6 @@ Cette table réutilise sans réattribution les codes de [PRODUCT.md](PRODUCT.md)
 - notice multi-catégorie unique;
 - run partielle, échec et interruption qui conservent le curseur précédent;
 - conflit de version d'état qui refuse la finalisation;
+- exécution sans `--yes` qui rend le code `3` avec zéro mutation;
 - Markdown et JSON déterministes sur fixtures locales;
 - aucun réseau réel dans les tests.
