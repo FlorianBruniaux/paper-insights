@@ -1,0 +1,55 @@
+docs/specs/AUTHOR-IDENTITY.md
+  s_2f2b8a177ba283::t_d3af6cf4f029f2 1-56
+docs/specs/FEDERATION.md
+  s_2f2b8a177ba283::t_d3af6cf4f029f2 1-66
+docs/decisions/ADR-0004-modular-monolith-ports.md
+  s_2f2b8a177ba283::t_eba083c75730ec 1-45
+docs/specs/PRODUCT.md
+  s_2f2b8a177ba283::t_69bd1b6d085501 5-7,11-15,22,32,42,52,62,64,66,69-72,75,77,79,82,86-97,99,101-103,105,111-114,116-118,121-122,130-142,144,155-167,169
+docs/superpowers/plans/2026-08-28-foundation-vertical-slice.md
+  s_2f2b8a177ba283::t_d9fed4acd4da84 3-4
+docs/specs/WATCHLISTS.md
+  s_2f2b8a177ba283::t_d3af6cf4f029f2 1-72
+docs/ARCHITECTURE.md
+  s_2f2b8a177ba283::t_8eb27730dda2b3 1,3,5,7,9-11,13-15,18-41,44,46,48-53,55,57-62,64,66,68-79,81,83-91,93,95,97-113,115-120,122,124,126,128-134,136,138,140-145,147
+docs/ROADMAP.md
+  s_2f2b8a177ba283::t_745f0174a4500b 3,5-36,42-45,49-52,59-65,69-74,80-84,88-92,98-102,106-109,116-118,122-125,131-135,139-144,146,150-154,158-161,167-170,174-181
+CHANGELOG.md
+  s_2f2b8a177ba283::t_e5b2dfe30d8393 17-24
+docs/specs/DATA-MODEL.md
+  s_2f2b8a177ba283::t_ee4a1a61287141 3,5,7-11,13,15,17,19-59,61,63,65-74,76,78-139,143-149,153,155-161,163,165,167-172,174,176-194,198-237,241,243,245,247-257,259,261,263,265-271,273,275-291,293,295,297,299-304
+docs/specs/SEARCH-AND-MCP.md
+  s_2f2b8a177ba283::t_35183a842316c7 1,3,5,10-16,18,20,22,24-35,37,39,41-56,63-87,89,91,93,95,97-102,104,106,108,110-155,157-164,173,179-182,184,188,190,192-194,196,200,202-208
+docs/specs/INGESTION.md
+  s_2f2b8a177ba283::t_5de5991e182da5 3,6-7,9,12-22,24,26,28,30-56,60-75,77,79,81,83,85-91,93,95,97-122,125-126,129,131-133,135,137,139-143,145,147,149-151,153,155,157-168,170-172,178,182-183,186,188,190
+docs/superpowers/plans/2026-08-28-complete-program-execution.md
+  s_2f2b8a177ba283::t_7c092dec15169b 117-120,131-132,142-145,205,215-218,260-261,268-270,277-278,502,594,725,729
+docs/decisions/ADR-0003-preview-manifest-and-publication.md
+  s_2f2b8a177ba283::t_eba083c75730ec 1-42
+README.md
+  s_2f2b8a177ba283::t_d9fed4acd4da84 49-52,54-56
+docs/decisions/ADR-0002-versioned-observations-and-provenance.md
+  s_2f2b8a177ba283::t_eba083c75730ec 1-41
+docs/DEVELOPMENT.md
+  s_2f2b8a177ba283::t_d9fed4acd4da84 28-30
+docs/superpowers/specs/2026-08-28-paper-insights-design.md
+  s_2f2b8a177ba283::t_d9fed4acd4da84 4-6
+docs/specs/ANALYSIS.md
+  s_2f2b8a177ba283::t_d3af6cf4f029f2 1-78
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "9182fa81410f872223f91a0055b8157db2db928d",
+  "prompts": {},
+  "sessions": {
+    "s_2f2b8a177ba283": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a04a7c-f938-7500-b20e-0faa6c4019c5",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Florian BRUNIAUX <florian@bruniaux.com>"
+    }
+  }
+}
