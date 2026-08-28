@@ -14,3 +14,11 @@ Toutes les modifications notables du projet sont consignées ici.
 - Garde Git vérifiée contre les stages larges sans bloquer les pathspecs relatifs explicites.
 - Roadmap et plan d'implémentation de la première tranche verticale.
 - Plan d'exécution complet des phases 0 à 7, avec contrats P0, lots parallèles, propriétaires de fichiers, gates et critères de release.
+- Contrats Gate 0 pour observations versionnées, snapshots source multi-records, identifiants à clés étrangères et révision atomique du catalogue.
+- Specs normatives pour watchlists, analyses sourcées, identité réversible des auteurs et fédération multi-corpus.
+- Contrats fermés pour collections, trois formats de citation, six outils MCP, enveloppes JSON et codes de sortie CLI.
+
+### Changed
+
+- `docs/DEVELOPMENT.md` et l'ancien plan vertical pointent désormais vers le plan complet comme seule autorité d'exécution.
+- `doctor` est spécifié strictement read-only; la récupération passe par `repair interrupted-runs --yes`.

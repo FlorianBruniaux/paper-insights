@@ -1,164 +1,304 @@
 # Spécification du modèle de données
 
-## Identifiants
+## Autorités
 
-- `paper_id`: UUIDv7 généré localement.
-- `paper_version_id`: UUIDv7 généré localement.
-- `author_id`: UUIDv7 généré localement.
-- `artifact_id`: UUIDv7 généré localement.
-- `run_id`: UUIDv7 généré localement.
-- `analysis_id`: UUIDv7 généré localement.
-- `passage_id`: SHA-256 de `paper_version_id`, du type d'artefact, de l'ordinal et du texte normalisé.
+Le catalogue distingue trois niveaux:
 
-Les identifiants externes sont normalisés dans une table dédiée. Aucun identifiant arXiv, DOI, OpenAlex ou ORCID ne devient la clé primaire interne.
+```text
+paper, identité locale d'une oeuvre
+  -> paper_version, identité d'une révision publiée par une source
+       -> version_observation, état bibliographique immuable observé pour cette révision
+```
 
-## Tables du catalogue
+`papers` ne contient aucune métadonnée externe. Le titre, le résumé, le DOI, l'ordre des auteurs, les catégories, le commentaire, la référence de journal, la langue, les dates source et l'URL source appartiennent à une `version_observation` ou à ses relations.
 
-### `papers`
+Une valeur externe absente reste `NULL`. Une chaîne vide signifie que la source a réellement fourni une chaîne vide. Les données observées, normalisées et inférées restent distinctes.
 
-| Colonne | Type | Règle |
-| --- | --- | --- |
-| `id` | TEXT | clé primaire UUIDv7 |
-| `canonical_title` | TEXT | obligatoire |
-| `title_normalized` | TEXT | obligatoire, indexé |
-| `abstract` | TEXT | chaîne vide si absent |
-| `first_seen_at` | DATETIME | UTC |
-| `updated_at` | DATETIME | UTC |
+## Identifiants internes
 
-### `paper_versions`
+Les identifiants suivants sont des UUIDv7 générés localement: `paper_id`, `paper_version_id`, `version_observation_id`, `author_id`, `blob_id`, `snapshot_id`, `artifact_id`, `run_id`, `collection_id`, `watchlist_id`, `analysis_id`, `identity_event_id`.
 
-| Colonne | Type | Règle |
-| --- | --- | --- |
-| `id` | TEXT | clé primaire UUIDv7 |
-| `paper_id` | TEXT | clé étrangère vers `papers` |
-| `source_id` | TEXT | clé étrangère vers `sources` |
-| `source_version` | TEXT | identifiant de version fourni par la source |
-| `submitted_at` | DATETIME | nullable |
-| `announced_at` | DATETIME | nullable |
-| `retrieved_at` | DATETIME | UTC obligatoire |
-| `is_current` | BOOLEAN | une seule version courante par papier et source |
+`passage_id` est un SHA-256 défini dans [SEARCH-AND-MCP.md](SEARCH-AND-MCP.md). Aucun identifiant arXiv, DOI, OpenAlex ou ORCID ne devient une clé primaire interne.
 
-Contrainte unique: `(source_id, source_version)`.
+## Révision du catalogue
 
-### `external_identifiers`
+### `catalog_meta`
 
-| Colonne | Type | Règle |
-| --- | --- | --- |
-| `entity_type` | TEXT | `paper`, `version` ou `author` |
-| `entity_id` | TEXT | identifiant interne |
-| `scheme` | TEXT | `arxiv`, `doi`, `openalex`, `orcid` |
-| `value` | TEXT | forme canonique |
-| `source_id` | TEXT | provenance |
-| `verified_at` | DATETIME | nullable |
+| Colonne | Règle |
+| --- | --- |
+| `singleton_id` | clé primaire, `CHECK(singleton_id = 1)` |
+| `revision` | entier positif ou nul |
+| `schema_contract_version` | chaîne fermée, initialement `catalog-v1` |
 
-Contrainte unique: `(scheme, value, entity_type)`.
+La migration initialise exactement une ligne avec `revision = 0`. Toute transaction catalogue validée qui contient au moins une mutation visible incrémente la révision exactement une fois dans cette transaction. Une lecture, un no-op, un rollback ou une erreur ne la change pas.
 
-### `authors`
+La création d'une run, chaque item committé, la finalisation, une mutation de collection et une réparation explicite sont des mutations visibles séparées. La publication d'un blob non attaché ne change pas la révision.
 
-| Colonne | Type | Règle |
-| --- | --- | --- |
-| `id` | TEXT | clé primaire UUIDv7 |
-| `display_name` | TEXT | nom observé |
-| `name_normalized` | TEXT | recherche, pas fusion automatique |
-| `orcid` | TEXT | nullable, unique si présent |
-| `openalex_id` | TEXT | nullable, unique si présent |
-| `linkedin_url` | TEXT | nullable, confirmation humaine requise |
-| `linkedin_confirmed_at` | DATETIME | nullable |
-
-### `paper_authors`
-
-| Colonne | Type | Règle |
-| --- | --- | --- |
-| `paper_version_id` | TEXT | clé étrangère |
-| `author_id` | TEXT | clé étrangère |
-| `position` | INTEGER | commence à 1 |
-| `raw_name` | TEXT | valeur source conservée |
-| `affiliation_raw` | TEXT | nullable |
-
-Clé primaire composite: `(paper_version_id, position)`.
+## Sources, blobs et snapshots
 
 ### `sources`
 
-| Colonne | Type | Règle |
-| --- | --- | --- |
-| `id` | TEXT | slug stable, par exemple `arxiv` |
-| `base_url` | TEXT | URL officielle |
-| `terms_url` | TEXT | nullable |
-| `enabled` | BOOLEAN | obligatoire |
+| Colonne | Règle |
+| --- | --- |
+| `id` | clé primaire, slug stable comme `arxiv` |
+| `base_url` | URL officielle |
+| `terms_url` | nullable |
+| `enabled` | booléen obligatoire |
 
-### `artifacts`
+### `stored_blobs`
 
-| Colonne | Type | Règle |
-| --- | --- | --- |
-| `id` | TEXT | clé primaire UUIDv7 |
-| `paper_version_id` | TEXT | clé étrangère |
-| `kind` | TEXT | `source_response`, `abstract`, `pdf`, `text`, `analysis` |
-| `relative_path` | TEXT | sous `data_root` |
-| `sha256` | TEXT | 64 caractères hexadécimaux |
-| `size_bytes` | INTEGER | positif ou nul |
-| `media_type` | TEXT | obligatoire |
-| `created_at` | DATETIME | UTC |
+| Colonne | Règle |
+| --- | --- |
+| `id` | UUIDv7, clé primaire |
+| `sha256` | 64 caractères hexadécimaux minuscules, unique |
+| `size_bytes` | entier positif ou nul |
+| `media_type` | obligatoire |
+| `relative_path` | chemin relatif confiné sous `data_root` |
+| `created_at` | UTC |
 
-Contrainte unique: `(paper_version_id, kind, sha256)`.
+Un blob est immuable et adressé par son contenu. Plusieurs snapshots ou artefacts peuvent référencer le même blob.
+
+### `source_snapshots`
+
+Une ligne représente une page ou réponse brute qui peut contenir plusieurs papiers.
+
+| Colonne | Règle |
+| --- | --- |
+| `id` | UUIDv7, clé primaire |
+| `source_id` | FK vers `sources` |
+| `stored_blob_id` | FK vers `stored_blobs` |
+| `prepared_digest` | SHA-256 du `PreparedDiscovery` exécuté |
+| `page_ordinal` | entier positif ou nul |
+| `request_fingerprint` | SHA-256 de la requête HTTP canonique |
+| `retrieved_at` | UTC, date de récupération source |
+| `next_cursor` | nullable, opaque |
+
+Contrainte unique: `(prepared_digest, page_ordinal)`. Rejouer le même manifeste ne crée pas un second snapshot. Une nouvelle découverte identique peut enregistrer un nouvel événement source tout en réutilisant le même blob.
+
+### `snapshot_records`
+
+| Colonne | Règle |
+| --- | --- |
+| `source_snapshot_id` | FK vers `source_snapshots` |
+| `ordinal` | position positive ou nulle dans la page |
+| `source_item_id` | identifiant de l'oeuvre fourni par la source, nullable si parsing impossible |
+| `source_version_key` | identifiant complet de version, nullable si parsing impossible |
+| `raw_record_sha256` | empreinte du record brut borné |
+| `version_observation_id` | FK nullable vers `version_observations` |
+
+Clé primaire: `(source_snapshot_id, ordinal)`. Plusieurs occurrences peuvent pointer vers la même observation normalisée. Un échec conserve son snapshot et son ordinal sans inventer d'observation.
+
+Une réponse multi-papiers est toujours un `source_snapshot`. `source_response` n'est pas un kind d'artefact de papier.
+
+## Corpus versionné
+
+### `papers`
+
+| Colonne | Règle |
+| --- | --- |
+| `id` | UUIDv7, clé primaire |
+| `created_at` | UTC |
+
+Cette table porte uniquement l'identité locale de l'oeuvre.
+
+### `paper_versions`
+
+| Colonne | Règle |
+| --- | --- |
+| `id` | UUIDv7, clé primaire |
+| `paper_id` | FK vers `papers` |
+| `source_id` | FK vers `sources` |
+| `source_version_key` | identifiant canonique complet de version |
+| `is_current` | booléen |
+| `created_at` | UTC |
+
+Contrainte unique: `(source_id, source_version_key)`. Pour arXiv, une clé de version est par exemple `2608.01234v2`, jamais le suffixe isolé `v2`.
+
+Un index unique partiel garantit une seule version courante par `(paper_id, source_id)` lorsque `is_current = 1`. La création d'une nouvelle version et la bascule de la version courante ont lieu dans la même transaction item.
+
+### `version_observations`
+
+| Colonne | Règle |
+| --- | --- |
+| `id` | UUIDv7, clé primaire |
+| `paper_version_id` | FK vers `paper_versions` |
+| `normalized_sha256` | empreinte du JSON bibliographique canonique |
+| `observed_at` | UTC |
+| `title` | obligatoire |
+| `title_normalized` | obligatoire |
+| `abstract` | nullable |
+| `comment` | nullable |
+| `journal_reference` | nullable |
+| `language` | nullable |
+| `source_url` | nullable |
+| `submitted_at` | nullable, UTC |
+| `announced_at` | nullable, UTC |
+
+Contrainte unique: `(paper_version_id, normalized_sha256)`. Une correction de métadonnées sur une version connue crée une nouvelle observation et conserve l'ancienne. Une observation déjà connue est réutilisée et le nouveau `snapshot_record` y est relié.
+
+L'observation courante d'une version est la dernière selon `(observed_at, id)`. La citation d'une version explicite peut aussi sélectionner une observation explicite lorsque la provenance doit être reproduite.
+
+### `authors`
+
+| Colonne | Règle |
+| --- | --- |
+| `id` | UUIDv7, clé primaire |
+| `created_at` | UTC |
+| `retired_at` | nullable, UTC |
+
+Un auteur est une identité locale. Son nom observé et ses affiliations vivent dans les relations ou observations de provenance.
+
+### `paper_authors`
+
+Le nom historique est conservé pour la migration initiale, mais l'autorité est l'observation.
+
+| Colonne | Règle |
+| --- | --- |
+| `version_observation_id` | FK vers `version_observations` |
+| `position` | commence à 1 |
+| `author_id` | FK vers `authors` |
+| `raw_name` | valeur source conservée |
+| `affiliation_raw` | nullable |
+
+Clé primaire: `(version_observation_id, position)`.
+
+### `paper_version_categories`
+
+| Colonne | Règle |
+| --- | --- |
+| `version_observation_id` | FK vers `version_observations` |
+| `position` | commence à 1 |
+| `category` | valeur source |
+| `is_primary` | booléen |
+
+Clé primaire: `(version_observation_id, position)`. Contrainte unique additionnelle: `(version_observation_id, category)`.
+
+## Identifiants externes avec vraies clés étrangères
+
+Les associations polymorphiques sont interdites.
+
+### `paper_identifiers`
+
+`paper_id` est une FK vers `papers`. La ligne contient `source_id`, `scheme`, `canonical_value`, `verified_at` nullable et la référence composite au snapshot record qui l'a prouvée. Contrainte unique: `(source_id, scheme, canonical_value)`.
+
+### `version_identifiers`
+
+`paper_version_id` est une FK vers `paper_versions`. La ligne contient les mêmes champs de provenance. Contrainte unique: `(source_id, scheme, canonical_value)`.
+
+### `author_identifiers`
+
+`author_id` est une FK vers `authors`. La ligne contient `source_id`, `scheme`, `canonical_value`, `verification_status`, `verified_at` et une preuve vers une observation de version ou une observation d'identité. ORCID et OpenAlex ne sont pas dupliqués comme colonnes sur `authors`.
+
+Une valeur identique observée plusieurs fois garde plusieurs preuves sans dupliquer l'association canonique. Un conflit entre deux entités reste `catalog_conflict`; le titre ou le nom seul ne le résout jamais.
+
+## Runs et erreurs
 
 ### `ingestion_runs`
 
-| Colonne | Type | Règle |
-| --- | --- | --- |
-| `id` | TEXT | clé primaire UUIDv7 |
-| `source_id` | TEXT | clé étrangère |
-| `query_json` | TEXT | JSON canonique |
-| `status` | TEXT | `running`, `succeeded`, `partial`, `failed` |
-| `started_at` | DATETIME | UTC |
-| `finished_at` | DATETIME | nullable |
-| `selected_count` | INTEGER | zéro ou positif |
-| `created_count` | INTEGER | zéro ou positif |
-| `updated_count` | INTEGER | zéro ou positif |
-| `unchanged_count` | INTEGER | zéro ou positif |
-| `failed_count` | INTEGER | zéro ou positif |
+| Colonne | Règle |
+| --- | --- |
+| `id` | UUIDv7, clé primaire |
+| `source_id` | FK vers `sources` |
+| `prepared_digest` | SHA-256 du manifeste confirmé |
+| `query_json` | JSON canonique, versionné |
+| `status` | `running`, `succeeded`, `partial`, `failed` |
+| `started_at` | UTC |
+| `finished_at` | nullable, UTC |
+| `selected_records` | positif ou nul |
+| `new_papers` | positif ou nul |
+| `new_versions` | positif ou nul |
+| `metadata_updates` | positif ou nul |
+| `unchanged_records` | positif ou nul |
+| `failed_records` | positif ou nul |
+
+### `ingestion_run_items`
+
+Chaque record sélectionné possède un item avec snapshot, ordinal, identifiants résolus et exactement un outcome:
+
+- `new_version`: une version inconnue et sa première observation sont créées;
+- `metadata_update`: la version existe et une observation nouvelle est créée;
+- `unchanged`: le hash normalisé existe déjà;
+- `failed`: aucune mutation corpus de cet item n'est committée.
+
+`created_paper` est vrai uniquement pour `new_version`. Contrainte unique: `(run_id, source_snapshot_id, record_ordinal)`.
+
+À la finalisation, les compteurs sont recalculés depuis les items et doivent respecter:
+
+```text
+selected_records = new_versions + metadata_updates + unchanged_records + failed_records
+new_papers <= new_versions
+new_papers = count(items where created_paper = true)
+```
+
+Statut final:
+
+- `succeeded` si `failed_records = 0`, y compris zéro sélection;
+- `partial` si une réussite et une erreur coexistent;
+- `failed` si tous les items sélectionnés ont échoué.
 
 ### `collection_errors`
 
-| Colonne | Type | Règle |
-| --- | --- | --- |
-| `id` | INTEGER | clé primaire |
-| `run_id` | TEXT | clé étrangère |
-| `source_item_id` | TEXT | nullable |
-| `stage` | TEXT | découverte, parsing, artefact ou catalogue |
-| `error_code` | TEXT | valeur stable |
-| `message` | TEXT | message nettoyé |
-| `occurred_at` | DATETIME | UTC |
+Une erreur référence `run_id`, l'item ou le snapshot record, une étape fermée, un code stable, un message nettoyé et `occurred_at`. Elle ne contient ni traceback, ni secret, ni URL signée.
 
-### `collections` et `collection_papers`
+## Artefacts d'une version
 
-Une collection possède un slug, un titre et des dates. La table de liaison conserve `paper_id`, `added_at` et une note facultative.
+### `artifacts`
 
-### `watchlists`
+| Colonne | Règle |
+| --- | --- |
+| `id` | UUIDv7, clé primaire |
+| `paper_version_id` | FK vers `paper_versions` |
+| `stored_blob_id` | FK vers `stored_blobs` |
+| `kind` | `abstract`, `pdf`, `text`, `analysis` |
+| `source_url` | nullable, observée |
+| `parent_artifact_id` | FK nullable pour un dérivé |
+| `producer_name` | nullable |
+| `producer_version` | nullable |
+| `created_at` | UTC |
 
-Une watchlist conserve `slug`, `source_id`, `query_json`, `cursor_json`, `overlap_seconds`, `enabled`, `created_at` et `last_success_at`. Le curseur change uniquement après une run validée.
+Contrainte unique: `(paper_version_id, kind, stored_blob_id)`. Un texte dérivé référence son PDF parent, son extracteur et sa version.
 
-### `analyses` et `analysis_claims`
+## Collections
 
-Une analyse conserve `paper_version_id`, `artifact_sha256`, `analysis_type`, `schema_version`, `prompt_version`, `model_provider`, `model_name`, `status`, `result_json`, `created_at`. Chaque claim conserve son texte, sa catégorie, son niveau d'incertitude et une relation vers un ou plusieurs `passage_id`.
+### `collections`
+
+Une collection contient `id`, un `slug` unique, un titre, `created_at` et `updated_at`. Les mutations passent par un service d'application CLI, jamais par MCP.
+
+### `collection_papers`
+
+La clé primaire `(collection_id, paper_id)` interdit les doublons. La ligne conserve `added_at` et une note nullable. Supprimer un papier d'une collection ne supprime pas le papier du corpus.
+
+## Watchlists
+
+La migration dédiée ajoute `watchlists` et les tables de runs/digests précisées dans [WATCHLISTS.md](WATCHLISTS.md). Le curseur validé et le curseur candidat restent distincts jusqu'à une finalisation réussie.
+
+## Analyses et preuves
+
+La migration d'analyse ajoute:
+
+- `evidence_passages`, avec FK vers version et artefact, texte normalisé, offsets et composants du `passage_id`;
+- `analysis_attempts`, avec empreinte d'entrée, versions de chunk/prompt/schéma, provider, modèle, paramètres, stop reason et validation;
+- `analysis_claims`;
+- `analysis_claim_evidence`, avec vraies FKs vers claim et passage;
+- `analysis_cache_entries`, qui pointe seulement vers une tentative `complete`.
+
+Une tentative ne devient `complete` que si chaque claim possède au moins un passage de la même version et de l'artefact d'entrée. Une tentative invalide ou tronquée reste auditée sans remplacer le cache valide.
+
+## Identité des auteurs
+
+La migration d'identité ajoute les observations de provider, affiliations observées, candidats, événements de merge/split et opérations inverses. Chaque événement conserve preuve, acteur, date et version attendue de l'état. Une URL LinkedIn confirmée est distincte d'une URL de recherche.
 
 ## Index de recherche
 
-L'index séparé contient:
+La base FTS séparée contient `documents`, `passages`, `passages_fts` et `index_meta`. Elle stocke la révision catalogue source, le schéma de chunk, sa génération et son propre SHA-256 dans un reçu privé.
 
-- `documents`: papier, version, titre, résumé, langue, source et empreinte;
-- `passages`: identifiant, document, ordinal, section, texte et offsets;
-- `passages_fts`: titre, section et texte;
-- `index_meta`: version du schéma, génération, date et empreinte du catalogue.
+La base FTS n'est pas l'autorité des claims d'analyse et ne porte aucune mutation corpus.
 
-## Normalisation et fusion
+## SQLite et migrations
 
-- un identifiant externe exact prime sur le titre;
-- un DOI canonique peut relier des notices de sources différentes;
-- un titre normalisé seul produit un candidat, jamais une fusion automatique;
-- un ORCID exact peut relier un auteur;
-- un nom exact sans identifiant ne suffit pas pour fusionner deux auteurs;
-- chaque fusion ou séparation d'auteur produit un événement d'audit réversible.
-
-## Migrations
-
-Chaque changement de table passe par Alembic. Les tests créent une base vide, appliquent toutes les migrations, contrôlent le schéma, puis testent une mise à niveau depuis la version précédente lorsque celle-ci existe.
+- toutes les connexions catalogue activent `foreign_keys=ON` et un `busy_timeout` configuré;
+- les writers utilisent WAL, `synchronous=FULL` et `BEGIN IMMEDIATE`;
+- les readers ouvrent une transaction cohérente en lecture seule;
+- chaque changement de schéma passe par une seule chaîne Alembic, possédée par Worker A;
+- les tests migrent de zéro à `head`, exécutent `foreign_key_check` et `quick_check`, puis testent chaque upgrade publié;
+- une migration ne compte pas comme mutation métier et n'incrémente pas `catalog_meta.revision`.

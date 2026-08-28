@@ -25,7 +25,9 @@ Ne pas générer de lockfile avant la première implémentation, car le socle ac
 
 ## Ordre d'implémentation
 
-Suivre `docs/superpowers/plans/2026-08-28-foundation-vertical-slice.md`. Chaque tâche possède son test, ses interfaces et son commit. Ne pas commencer le PDF, l'analyse LLM ou les watchlists avant que la tranche arXiv sur fixtures passe entièrement.
+Suivre `docs/superpowers/plans/2026-08-28-complete-program-execution.md`. WP-00 puis WP-01 sont les seuls travaux autorisés avant validation de Gate 0. L'ancien plan `2026-08-28-foundation-vertical-slice.md` reste une archive de conception et ne doit pas être exécuté.
+
+Chaque work package suit test rouge, changement minimal, test ciblé, gate du package, revue puis commit ciblé. Un seul owner modifie SQLAlchemy et la chaîne Alembic. Les workers ne changent pas silencieusement une spec ou un port partagé.
 
 ## Tests hors réseau
 

@@ -1,114 +1,190 @@
 # Spécification de l'ingestion
 
-## Contrat d'un provider
-
-Un provider expose une interface synchrone:
+## Contrat synchrone du provider
 
 ```python
-class PaperProvider(Protocol):
-    source_id: str
+class DiscoveryProvider(Protocol):
+    source_id: SourceId
 
-    def preview(self, query: DiscoveryQuery) -> DiscoveryPreview: ...
-    def iter_records(self, query: DiscoveryQuery) -> Iterator[RawPaperRecord]: ...
+    def discover(self, query: DiscoveryQuery) -> DiscoveryBatch: ...
 ```
 
-`DiscoveryQuery` contient une requête, des catégories, une fenêtre de dates, une limite et un curseur facultatif. `RawPaperRecord` conserve l'identifiant source et le payload brut borné avant normalisation.
+`DiscoveryQuery` est un DTO fermé qui contient texte, catégories, auteurs, identifiants explicites, fenêtre de dates UTC, limite et curseur opaque. Au moins un sélecteur est requis.
 
-## Preview
+`DiscoveryBatch` contient:
 
-La preview peut appeler la source externe mais ne crée ni répertoire de données, ni base, ni fichier temporaire persistant. Elle retourne:
+- la source et la requête canonique;
+- des `DiscoveryPage` ordonnées avec payload brut borné, SHA-256, type MIME, date de récupération, empreinte de requête et curseur suivant;
+- des records ordonnés, chacun relié à son ordinal de page et de record;
+- les `ObservedPaperVersion` normalisés;
+- les issues de collecte ou d'exclusion.
 
-- source et requête canonique;
-- nombre demandé et nombre découvert;
-- fenêtre de dates et filtres;
-- identifiants sélectionnés;
-- exclusions avec codes stables;
-- erreurs de découverte;
-- estimation des artefacts demandés.
+Le tuple `batch.records` doit être strictement égal, dans le même ordre, aux observations portées par les records des pages. Cette redondance immuable ferme la provenance exigée par le contrat Gate 0.
 
-Une preview expire après 15 minutes. Son empreinte SHA-256 couvre la requête canonique et les identifiants sélectionnés. L'exécution vérifie cette empreinte avant de commencer.
+## Préparation sans mutation
+
+`PrepareDiscovery` appelle le provider une fois, applique les limites et produit un `PreparedDiscovery` immuable. Cette opération ne crée ni racine de données, ni base, ni blob, ni fichier temporaire persistant.
+
+L'aperçu versionné contient:
+
+- `schema_version = "discovery-preview-v1"`;
+- source et requête JSON canonique;
+- nombres demandé, découvert et sélectionné;
+- locators sélectionnés avec page, ordinal, identifiant source et identifiant complet de version;
+- exclusions et erreurs avec codes stables;
+- estimation des artefacts demandés;
+- date de préparation, date d'expiration et digest.
+
+Une preview expire après 15 minutes.
+
+## Digest du manifeste
+
+Le digest est le SHA-256 UTF-8 d'un JSON canonique avec clés triées, séparateurs `,` et `:`, sans espaces ajoutés. Il couvre exactement:
+
+```json
+{
+  "schema_version": "prepared-discovery-v1",
+  "source_id": "arxiv",
+  "query": {},
+  "selected_source_versions": [],
+  "page_sha256": []
+}
+```
+
+`query` est l'objet canonique fermé. Les versions sélectionnées conservent l'ordre déterministe de la source après déduplication de pagination. Les SHA-256 de pages conservent l'ordre des pages. Modifier requête, sélection, ordre, version ou payload change le digest.
+
+`PreparedDiscovery` conserve le batch exact, l'aperçu, le digest, `prepared_at` et `expires_at`. Le service vérifie la cohérence source/requête, le mapping total page-record et le digest avant toute mutation.
 
 ## Confirmation
 
-- Une ingestion d'un identifiant explicite peut commencer après une demande utilisateur explicite.
-- Une recherche, catégorie, watchlist ou liste de plusieurs identifiants exige une preview et une confirmation.
-- `--yes` vaut confirmation seulement si la commande contient les mêmes paramètres que la preview affichée dans la même exécution.
-- Un processus non interactif sans `--yes` termine avec le code 3 et zéro mutation.
+- Un identifiant explicite unique peut être exécuté après une demande utilisateur explicite.
+- Une recherche, catégorie, watchlist ou sélection multiple exige preview puis confirmation.
+- `--yes` confirme uniquement le `PreparedDiscovery` construit dans la même exécution CLI.
+- Un processus non interactif sans confirmation termine avec le code `3` et zéro mutation.
+- Une preview expirée ou un digest différent est refusé avant ouverture d'une run.
 
-## Pagination et politesse
+Après confirmation, l'exécution consomme le `PreparedDiscovery` reçu. Elle ne rappelle jamais `discover()` et ne reconstruit jamais la sélection depuis la requête.
 
-- le provider respecte l'ordre déterministe de la source;
-- chaque page possède une limite configurée;
-- les délais et reprises utilisent des bornes explicites;
-- les réponses 429 et 5xx peuvent être reprises avec attente bornée;
-- les erreurs 4xx non transitoires ne sont pas reprises;
-- l'agent utilisateur provient de la configuration et ne contient aucun secret;
-- les tests utilisent des transports HTTP simulés et des fixtures figées.
+## Publication des pages et provenance
 
-## Idempotence
+Pour chaque page confirmée:
 
-La clé naturelle d'une notice arXiv combine l'identifiant arXiv canonique et la version. Une ingestion identique:
+1. publier le payload comme `stored_blob` content-addressed;
+2. attacher un `source_snapshot` au blob avec digest, page, requête et date;
+3. créer les `snapshot_records` ordonnés;
+4. seulement ensuite ouvrir les transactions courtes par record.
 
-- retrouve le papier existant;
-- retrouve la version existante;
-- vérifie les empreintes des artefacts;
-- incrémente `unchanged_count`;
-- ne modifie pas `first_seen_at`;
-- n'écrit pas un second artefact identique.
+Le blob est publié hors transaction SQL. Un échec avant `os.replace` ne laisse aucun fichier final. Un échec SQL après publication laisse un blob orphelin que `doctor` signale sans le supprimer.
 
-Une nouvelle version crée `paper_version`, met à jour `is_current` dans la même transaction et conserve l'historique.
+Une page multi-papiers reste un snapshot unique. Elle n'est ni copiée, ni enregistrée comme artefact de chaque papier.
 
-## Artefacts
+## Exécution par item
 
-Chemin cible:
+Une run est créée avant le premier item. Chaque item utilise une transaction `BEGIN IMMEDIATE` qui:
+
+1. retrouve ou crée l'oeuvre par identifiant exact;
+2. retrouve ou crée la version source complète;
+3. compare le hash bibliographique normalisé;
+4. crée une observation immuable si nécessaire;
+5. relie snapshot, ordinal, auteurs, catégories et identifiants;
+6. enregistre un `ingestion_run_item` avec un outcome unique;
+7. incrémente la révision catalogue une fois si la transaction contient une mutation visible.
+
+Une erreur sur un item rollbacke ses mutations corpus, puis une transaction séparée enregistre l'item `failed` et son erreur nettoyée. Les succès précédents restent committés.
+
+## Idempotence et mises à jour
+
+Pour arXiv:
+
+- identifiant de papier: forme canonique sans version, par exemple `2608.01234`;
+- identifiant de version: forme canonique complète, par exemple `2608.01234v2`.
+
+Un replay du même manifeste:
+
+- réutilise blobs et snapshots logiques;
+- retrouve papier, version et observation;
+- compte `unchanged`;
+- ne crée ni seconde observation identique, ni second artefact identique.
+
+Une nouvelle récupération au payload identique peut ajouter une provenance source distincte tout en reliant l'observation existante. Une métadonnée différente pour la même version crée une `metadata_update`. Une nouvelle version crée `paper_version`, conserve les versions précédentes et met à jour `is_current` dans la même transaction.
+
+## Compteurs et statuts
+
+Les compteurs ont exactement ces sens:
+
+- `selected_records`: records logiques sélectionnés après déduplication;
+- `new_papers`: oeuvres localement inconnues créées;
+- `new_versions`: versions source localement inconnues créées;
+- `metadata_updates`: observations nouvelles attachées à une version source connue;
+- `unchanged_records`: hash normalisé déjà connu;
+- `failed_records`: records sélectionnés non committés dans le corpus.
+
+La finalisation recalcule les compteurs depuis les items et refuse la transaction si:
 
 ```text
-data/artifacts/arxiv/<paper-id>/<version>/<kind>-<sha256-prefix>.<ext>
+selected_records != new_versions + metadata_updates + unchanged_records + failed_records
+new_papers > new_versions
 ```
 
-Le writer:
+Statuts:
 
-1. résout la cible sous `data_root`;
-2. crée un fichier temporaire privé dans le même répertoire;
-3. écrit avec une limite de taille;
-4. synchronise, ferme et calcule SHA-256;
-5. valide le type et la taille;
-6. publie par `os.replace`;
-7. enregistre l'artefact dans la transaction catalogue.
+- `succeeded`: aucune erreur, y compris zéro sélection;
+- `partial`: au moins un item réussi et au moins un item échoué;
+- `failed`: aucun item réussi et au moins un item échoué.
 
-Un échec avant l'étape 6 ne produit pas d'artefact final. Un échec catalogue après publication marque l'artefact comme orphelin détectable par `doctor`, sans le présenter comme ingéré.
+## Diagnostic et réparation
 
-## Transactions et reprise
+`paper-insights doctor` est strictement read-only:
 
-Une run est créée avant le premier élément. Chaque élément utilise une transaction courte. Le statut final dépend des compteurs:
+- aucun réseau;
+- aucune création de dossier, fichier, base ou connexion writable;
+- aucun changement de statut;
+- aucune suppression d'orphelin;
+- aucune valeur sensible dans sa sortie.
 
-- `succeeded`: au moins zéro sélection, aucune erreur;
-- `partial`: au moins un succès et au moins une erreur;
-- `failed`: aucun succès et au moins une erreur.
+Un fichier absent, inaccessible ou ambigu produit `UNKNOWN`, pas un succès.
 
-Une run restée `running` après une interruption est marquée `failed` au prochain diagnostic avec le code `interrupted`. La reprise rejoue les éléments par identifiant naturel.
+La récupération est une commande distincte:
+
+```bash
+paper-insights repair interrupted-runs --yes
+```
+
+Sans `--yes`, elle prévisualise les runs concernées et termine avec le code `3` sans mutation. Avec confirmation, elle marque les runs `running` antérieures au seuil comme `failed`, ajoute le code `interrupted`, finalise leurs compteurs depuis les items et incrémente la révision. La réparation est idempotente et ne rejoue pas le réseau.
+
+## Pagination, délais et reprises
+
+- l'ordre provider est déterministe;
+- la page et la limite totale sont bornées;
+- les payloads sont streamés sous une limite stricte;
+- seuls HTTPS et les hôtes explicitement autorisés sont acceptés;
+- chaque redirection est revalidée;
+- timeout, `429` et `5xx` peuvent être repris sous bornes;
+- `Retry-After` est plafonné;
+- les `4xx` permanents ne sont pas repris;
+- l'agent utilisateur vient de la configuration sans secret;
+- les tests utilisent transports simulés et fixtures figées, jamais le réseau réel.
 
 ## Watchlists
 
-Une watchlist utilise une fenêtre de recouvrement afin de résister aux retards et aux changements d'ordre. La déduplication repose sur les identifiants et versions, pas sur le curseur seul. Le nouveau curseur est écrit seulement après le traitement et la validation de la page finale.
+Une watchlist prépare puis exécute le même contrat avec fenêtre de recouvrement. La déduplication repose sur les identifiants papier/version et les hashes normalisés, jamais sur le curseur seul. Le curseur candidat devient validé uniquement dans une finalisation réussie décrite dans [WATCHLISTS.md](WATCHLISTS.md).
 
-## Erreurs
-
-Les erreurs publiques utilisent un code stable, une étape et un message nettoyé. Le traceback reste dans les logs de développement locaux si le niveau le demande, jamais dans le JSON CLI, le MCP ou `collection_errors`.
-
-Codes initiaux:
+## Erreurs fermées initiales
 
 - `source_timeout`
 - `source_rate_limited`
 - `source_response_too_large`
 - `source_invalid_payload`
+- `source_redirect_refused`
 - `record_invalid`
 - `artifact_invalid`
 - `catalog_conflict`
+- `preview_expired`
+- `preview_mismatch`
 - `interrupted`
+
+Chaque erreur publique contient version de schéma, code, étape et message nettoyé. Le traceback reste dans les logs de développement locaux si leur niveau l'autorise.
 
 ## arXiv P1
 
-La première implémentation accepte une requête texte, une ou plusieurs catégories, une limite de 1 à 100 et une fenêtre de dates facultative. Elle conserve l'identifiant arXiv sans version comme identifiant de papier et la forme suffixée `vN` comme identifiant de version source.
-
-Le parser préserve l'ordre des auteurs, toutes les catégories, le commentaire, le journal de référence et le DOI lorsqu'ils sont fournis. Un champ absent reste absent.
+Le premier adapter cible accepte texte, catégories, limite de 1 à 100, fenêtre de dates et curseur. Le parser préserve ordre des auteurs, catégories, commentaire, journal de référence, DOI et URLs lorsqu'ils sont fournis. Un champ absent reste absent.

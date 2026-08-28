@@ -114,6 +114,10 @@ class CatalogReader(Protocol):
     def current_revision(self) -> int: ...
 
 
+class CatalogRevisionGuard(Protocol):
+    def hold_if_current(self, expected_revision: int) -> ContextManager[None]: ...
+
+
 class CatalogUnitOfWork(Protocol):
     runs: RunRepository
     corpus: CorpusRepository
@@ -124,8 +128,8 @@ class CatalogUnitOfWork(Protocol):
 
 
 class SearchIndexReader(Protocol):
-    def search_papers(self, query: SearchQuery) -> tuple[PaperHit, ...]: ...
-    def search_passages(self, query: SearchQuery) -> tuple[PassageHit, ...]: ...
+    def search_papers(self, query: SearchQuery) -> PaperSearchResult: ...
+    def search_passages(self, query: SearchQuery) -> PassageSearchResult: ...
     def get_passage(self, passage_id: str) -> PassageView | None: ...
 
 
@@ -134,6 +138,10 @@ class FederatedCorpus(Protocol):
 
     def search(self, query: FederatedQuery) -> CorpusSearchResult: ...
 ```
+
+`PaperSearchResult` and `PassageSearchResult` carry hits, coverage, catalogue and index revisions, `truncated`, `returned` and `available`. Every normalized observation carries page and record ordinals. The ordered `DiscoveryBatch.records` view must equal the observations embedded in its pages.
+
+Gate 0 also freezes synchronous ports for `SearchIndexBuilder`, `CitationRenderer`, `WatchlistUnitOfWorkFactory`, `FullTextProvider`, `TextExtractor`, `AnalysisUnitOfWorkFactory`, `IdentityUnitOfWorkFactory` and `EvidenceBundleWriter`. Workers may add implementations but may not change these contracts.
 
 Run counters have exactly these meanings:
 
@@ -194,6 +202,7 @@ Wave 0 is sequential because all later packages consume its schema and ports.
 - Modify: `docs/specs/DATA-MODEL.md`
 - Modify: `docs/specs/INGESTION.md`
 - Modify: `docs/specs/SEARCH-AND-MCP.md`
+- Modify: `docs/specs/PRODUCT.md`
 - Modify: `docs/ROADMAP.md`
 - Create: `docs/specs/WATCHLISTS.md`
 - Create: `docs/specs/ANALYSIS.md`
@@ -203,6 +212,10 @@ Wave 0 is sequential because all later packages consume its schema and ports.
 - Create: `docs/decisions/ADR-0003-preview-manifest-and-publication.md`
 - Create: `docs/decisions/ADR-0004-modular-monolith-ports.md`
 - Modify: `docs/superpowers/plans/2026-08-28-foundation-vertical-slice.md`
+- Modify: `docs/superpowers/specs/2026-08-28-paper-insights-design.md`
+- Modify: `docs/DEVELOPMENT.md`
+- Modify: `README.md`
+- Modify: `docs/superpowers/plans/2026-08-28-complete-program-execution.md` only for Gate 0 contract corrections
 - Modify: `CHANGELOG.md`
 
 **Steps:**
@@ -244,18 +257,25 @@ Commit: `docs: freeze paper insights contracts`
 - Create: `src/paper_insights/application/ports/catalog.py`
 - Create: `src/paper_insights/application/ports/artifacts.py`
 - Create: `src/paper_insights/application/ports/search.py`
+- Create: `src/paper_insights/application/ports/citations.py`
+- Create: `src/paper_insights/application/ports/monitoring.py`
 - Create: `src/paper_insights/application/ports/analysis.py`
 - Create: `src/paper_insights/application/ports/identity.py`
 - Create: `src/paper_insights/application/ports/federation.py`
 - Create: `tests/domain/test_identifiers.py`
 - Create: `tests/domain/test_run_counters.py`
 - Create: `tests/domain/test_preview_digest.py`
+- Create: `tests/domain/test_passage_ids.py`
+- Create: `tests/domain/test_error_codes.py`
+- Create: `tests/domain/test_contract_shapes.py`
 - Create: `tests/architecture/test_import_boundaries.py`
 
 **Steps:**
 
 - [ ] Write failing tests for canonical identifiers, preview digest, expiry and counter invariants.
 - [ ] Add immutable dataclasses, value objects, stable error codes and protocols.
+- [ ] Carry provenance, coverage, revisions and truncation in the shared read models.
+- [ ] Freeze the closed CLI exit-code enum and public JSON schema versions.
 - [ ] Implement UUIDv7 behind `IdGenerator`; pin `uuid-utils` in WP-02 rather than leaking it into the domain.
 - [ ] Add the import-boundary test over the Python AST.
 
@@ -479,6 +499,7 @@ Commit: `feat: add revision-safe local paper search`
 **Steps:**
 
 - [ ] Resolve internal, arXiv and DOI identifiers without title guessing.
+- [ ] Create, rename, list, add to and remove from collections through application services; keep MCP read-only.
 - [ ] Render BibTeX, Markdown and CSL-JSON from observed catalogue metadata only.
 - [ ] Preserve author order, escape BibTeX deterministically and list missing fields.
 - [ ] Define collection read models and stable counts for CLI/MCP.
@@ -570,7 +591,7 @@ Commit: `feat: expose closed-world paper research mcp`
 - [ ] Diff on source paper/version identifiers, not cursor position alone.
 - [ ] Deduplicate multi-category notices in one digest.
 - [ ] Advance the cursor only in successful finalization; retain the previous cursor after partial/failed runs.
-- [ ] Emit deterministic Markdown and JSON digests with codes 0 success, 2 partial, 4 failure and 3 confirmation required.
+- [ ] Emit deterministic Markdown and JSON digests with the product codes: 0 success, 2 invalid input or configuration, 3 confirmation required, 4 partial success, 5 source unavailable and 6 corpus invalid.
 
 **Verification:**
 
@@ -701,11 +722,11 @@ Commit: `feat: add reversible author identity enrichment`
 
 ### WP-42: Federated research
 
-**Owner:** Worker C after the MCP contract is stable.
+**Owner:** Worker C after the MCP contract is stable. The integrator owns ADR-0005 and lands it before dispatch.
 
 **Files:**
 
-- Create: `docs/decisions/ADR-0005-federated-corpus-contract.md`
+- Consume: `docs/decisions/ADR-0005-federated-corpus-contract.md`
 - Create: `src/paper_insights/application/federation/models.py`
 - Create: `src/paper_insights/application/federation/service.py`
 - Create: `src/paper_insights/adapters/federation/papers.py`

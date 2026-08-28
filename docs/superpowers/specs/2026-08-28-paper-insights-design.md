@@ -1,7 +1,9 @@
 # Paper Insights: design initial
 
 - Date: 2026-08-28
-- Statut: approuvé dans la conversation qui a précédé la création du dépôt
+- Statut: historique, remplacé pour l'exécution par le plan complet et les specs Gate 0
+
+Les décisions générales restent informatives. Le périmètre de tranche, les interfaces et le critère final ci-dessous ne sont plus normatifs lorsqu'ils diffèrent de `docs/superpowers/plans/2026-08-28-complete-program-execution.md` ou de `docs/specs/`.
 
 ## Objectif
 

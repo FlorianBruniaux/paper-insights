@@ -1,5 +1,7 @@
 # Foundation Vertical Slice Implementation Plan
 
+> **Statut historique:** ce plan est remplacé pour toute exécution par `docs/superpowers/plans/2026-08-28-complete-program-execution.md`. Ses interfaces `preview + iter_records`, son schéma polymorphe, ses anciens compteurs et son artefact `source_response` ne doivent pas être implémentés. Le document reste seulement une trace de la première conception.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Ingest a fixed arXiv response into SQLite, search its titles and abstracts, and export a source-backed BibTeX citation through CLI and MCP read-only interfaces.

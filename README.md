@@ -46,7 +46,14 @@ Le catalogue relationnel conserve les entités et la provenance. Un index FTS5 s
 | [Modèle de données](docs/specs/DATA-MODEL.md) | Entités, identifiants et provenance |
 | [Ingestion](docs/specs/INGESTION.md) | Découverte, reprise et idempotence |
 | [Recherche et MCP](docs/specs/SEARCH-AND-MCP.md) | FTS5, citations et outils MCP |
+| [Watchlists](docs/specs/WATCHLISTS.md) | Curseurs, overlap, finalisation et digests |
+| [Analyse](docs/specs/ANALYSIS.md) | Texte intégral, passages, cache, claims et preuves |
+| [Identité des auteurs](docs/specs/AUTHOR-IDENTITY.md) | Observations, décisions réversibles et LinkedIn manuel |
+| [Fédération](docs/specs/FEDERATION.md) | Contrat multi-corpus et couverture partielle |
 | [Décision Python et SQLite](docs/decisions/ADR-0001-python-sqlite.md) | Choix techniques initiaux |
+| [Décision observations et provenance](docs/decisions/ADR-0002-versioned-observations-and-provenance.md) | Autorité des versions, snapshots et preuves |
+| [Décision manifeste et publication](docs/decisions/ADR-0003-preview-manifest-and-publication.md) | Batch confirmé, révision et publication atomique |
+| [Décision monolithe modulaire](docs/decisions/ADR-0004-modular-monolith-ports.md) | Couches, ports et dépendances |
 
 ## Configuration des agents
 

@@ -1,103 +1,147 @@
-# Architecture de Paper Insights
+# Architecture cible de Paper Insights
 
-## Décision d'ensemble
+## État et décision d'ensemble
 
-Le projet utilise deux bases SQLite sous une racine de données unique:
+Cette architecture est le contrat cible du programme. Le runtime métier n'est pas encore disponible tant que les gates correspondantes ne sont pas passées.
 
-- `catalog.sqlite3` contient les entités, relations, exécutions et erreurs;
-- `.search/search-v1.sqlite3` contient les documents et passages FTS5 publiés.
+Paper Insights reste un monolithe modulaire local avec trois autorités de stockage sous une racine de données unique:
 
-Les artefacts bruts et dérivés restent sur disque. Le catalogue enregistre leur chemin relatif, leur taille, leur type MIME et leur SHA-256.
+- `catalog.sqlite3` conserve les identités, observations, relations, exécutions et preuves durables;
+- `.search/search-v1.sqlite3` est une projection FTS5 remplaçable;
+- `blobs/` contient les payloads et artefacts immuables adressés par SHA-256.
 
-## Composants
+SQLite, le système de fichiers, HTTP, les backends LLM, la CLI et le MCP sont des adaptateurs. Ils ne définissent pas le domaine.
 
-```text
-paper_insights/
-├── cli/           commandes et rendu utilisateur
-├── config.py      configuration stricte et précédence
-├── paths.py       chemins dérivés de data_root
-├── domain/        types métier sans accès externe
-├── providers/     arXiv, puis OpenAlex, Crossref et ORCID
-├── ingestion/     previews, runs, reprise et erreurs
-├── catalog/       transactions SQLAlchemy et migrations Alembic
-├── artifacts/     téléchargement borné, empreintes, publication atomique
-├── search/        chunking, construction FTS5 et requêtes
-├── analysis/      schémas, prompts et rattachement aux passages
-├── citations/     BibTeX, Markdown et CSL-JSON
-└── mcp/           façade locale strictement read-only
-```
-
-Chaque paquet possède un contrat public réduit. Le CLI et le MCP appellent des services d'application, jamais directement un provider ou une table.
-
-## Flux d'ingestion
-
-1. Un provider transforme une requête en page de résultats bruts.
-2. Le service de preview applique les limites et produit un résumé sans écrire dans le corpus.
-3. Après autorisation, une `ingestion_run` est ouverte.
-4. Chaque résultat est normalisé en papier, version, auteurs et identifiants.
-5. Les artefacts sont écrits dans un fichier temporaire, contrôlés, puis publiés par remplacement atomique.
-6. Le catalogue enregistre les objets, les empreintes et les erreurs dans une transaction bornée.
-7. La run se termine avec un statut et des compteurs exacts.
-8. Une reconstruction séparée publie un nouvel index FTS5.
-
-Une erreur sur un papier ne supprime pas les succès précédents de la run. Elle produit une `collection_error` liée à la source et à l'étape.
-
-## Flux de recherche
-
-1. La requête est normalisée et bornée.
-2. Le service interroge l'index FTS5 en lecture seule.
-3. Les passages retournent `paper_id`, `paper_version_id`, `passage_id`, rang et extrait.
-4. Le catalogue complète les métadonnées et les identifiants.
-5. Le CLI ou le MCP tronque sa réponse sous une limite documentée.
-
-Le service de recherche ne déclenche ni collecte, ni analyse, ni reconstruction d'index.
-
-## Flux d'analyse
-
-1. L'utilisateur choisit un papier et une version.
-2. Le service résout un artefact stable et vérifie son empreinte.
-3. Le texte est découpé en passages déterministes.
-4. Le backend LLM reçoit des lots bornés.
-5. La sortie est validée avec Pydantic.
-6. Chaque claim conserve les `passage_id` probants.
-7. L'analyse finale est écrite atomiquement et enregistrée dans le catalogue.
-
-Une réponse tronquée, invalide ou sans passage probant n'est pas publiée comme analyse complète.
-
-## Dépendances
-
-Le domaine ne dépend d'aucun framework. Les dépendances pointent vers l'intérieur:
+## Arborescence cible
 
 ```text
-CLI / MCP -> services -> domain
-                      -> ports
-providers / catalog / search / LLM -> ports
+src/paper_insights/
+├── domain/                 valeurs et invariants sans framework
+├── application/
+│   ├── ports/              protocoles synchrones
+│   ├── ingestion/          préparation, exécution et réparation
+│   ├── research/           index, recherche, collections et citations
+│   ├── monitoring/         watchlists et digests
+│   ├── analysis/           texte intégral, passages et analyses
+│   ├── identity/           observations et décisions d'identité
+│   └── federation/         orchestration de corpus indépendants
+├── adapters/
+│   ├── providers/          arXiv, OpenAlex et ORCID
+│   ├── catalog/sqlite/     SQLAlchemy, Alembic et transactions
+│   ├── artifacts/filesystem/
+│   ├── search/sqlite_fts/
+│   ├── analysis/
+│   ├── identity/
+│   └── federation/
+├── interfaces/
+│   ├── cli/
+│   └── mcp/
+├── config.py
+├── paths.py
+└── bootstrap.py
 ```
 
-Les clients HTTP, sessions SQLAlchemy, horloges et générateurs d'identifiants sont injectés. Aucun client réseau ou scheduler n'est créé à l'import d'un module.
+## Règle de dépendance
 
-## Processus
+Les dépendances pointent vers le domaine et les ports:
 
-La première version utilise des commandes courtes:
+```text
+interfaces -> services d'application -> domain
+                                 \----> application.ports
+adapters ------------------------------> application.ports
+bootstrap -> interfaces + services + adapters + configuration
+```
 
-- `paper-insights search` lit le corpus;
-- `paper-insights ingest` collecte après preview;
-- `paper-insights watch run` exécute une veille;
-- `paper-insights index build` reconstruit l'index;
-- `paper-insights mcp serve` démarre le serveur local.
+Règles vérifiées par AST:
 
-Le planificateur reste externe. `cron`, `launchd` ou une automation appelle la CLI. Cette frontière évite les tâches dupliquées dans plusieurs workers web.
+- `domain` n'importe ni `application`, ni `adapters`, ni `interfaces`, ni framework;
+- `application` n'importe ni `adapters`, ni `interfaces`, ni racine de composition;
+- `interfaces` appelle les services d'application et n'importe aucun modèle SQLAlchemy;
+- les adaptateurs n'exposent que des DTO du domaine ou des ports;
+- `bootstrap.py` est le seul module qui assemble les implémentations concrètes;
+- aucun client HTTP, moteur SQLAlchemy, serveur MCP ou scheduler n'est créé à l'import.
 
-## Sécurité et données
+Pydantic reste limité à la configuration, aux enveloppes CLI/MCP et aux schémas de frontière LLM. Les contrats métier utilisent des dataclasses immuables.
 
-- les fichiers de configuration ne contiennent pas de secret;
-- les réponses HTTP ont une taille maximale;
-- les redirections, schémas et hôtes sont contrôlés par provider;
-- les chemins restent sous `data_root` après résolution;
-- les lectures du MCP ouvrent SQLite en mode read-only;
-- les messages d'erreur ne contiennent ni traceback, ni token, ni URL signée;
-- le corpus et les PDF restent hors Git.
+## Autorités et frontières
 
-## Évolution
+| Contexte | Autorité | Ports publics |
+| --- | --- | --- |
+| Plateforme | horloge, identifiants, configuration et chemins | `Clock`, `IdGenerator` |
+| Acquisition | requêtes, pages, snapshots, preview et runs | `DiscoveryProvider`, `CatalogUnitOfWorkFactory`, `BlobStore` |
+| Corpus | papiers, versions, observations, auteurs, identifiants et collections | `CatalogReader`, `CorpusRepository` |
+| Retrieval | générations FTS, documents, passages et BM25 | `SearchIndexBuilder`, `SearchIndexReader`, `CatalogRevisionGuard` |
+| Citations | BibTeX, Markdown et CSL-JSON | `CitationRenderer` |
+| Monitoring | watchlists, recouvrement, curseurs et digests | `WatchlistUnitOfWorkFactory` |
+| Analysis | texte autorisé, extraction, passages, cache, claims et preuves | `FullTextProvider`, `TextExtractor`, `AnalysisBackend`, `AnalysisUnitOfWorkFactory` |
+| Identity | observations, candidats et événements réversibles | `IdentityProvider`, `IdentityUnitOfWorkFactory` |
+| Federation | résultats natifs, couverture partielle et dossiers de preuves | `FederatedCorpus`, `EvidenceBundleWriter` |
+| Delivery | CLI et six outils MCP read-only | services d'application uniquement |
 
-PostgreSQL devient une option seulement si plusieurs processus doivent écrire simultanément ou si les mesures SQLite dépassent les seuils documentés. Un index vectoriel devient une option seulement après un benchmark contre FTS5 sur un jeu de requêtes annoté manuellement.
+## Flux de découverte et d'ingestion
+
+1. Un provider exécute une requête bornée et retourne un `DiscoveryBatch` immuable contenant pages brutes, enregistrements normalisés et issues.
+2. Le service prépare un `PreparedDiscovery`, son aperçu, son digest et son expiration sans écrire dans le corpus.
+3. La confirmation porte sur ce manifeste exact. L'exécution ne rappelle jamais le provider.
+4. Chaque page brute est publiée comme blob, puis attachée comme `source_snapshot`. Une page multi-papiers n'est jamais un artefact de papier.
+5. Chaque occurrence conserve son snapshot et son ordinal dans `snapshot_records`.
+6. Une run est créée. Chaque record sélectionné est traité dans une transaction courte `BEGIN IMMEDIATE`.
+7. La transaction item crée ou retrouve papier, version et observation, relie provenance, auteurs, catégories et identifiants, puis enregistre un outcome unique.
+8. La finalisation recalcule les compteurs depuis les items et refuse un invariant faux.
+9. Une interruption reste visible comme `running`. `doctor` la signale sans mutation; `repair interrupted-runs --yes` est la seule réparation.
+
+## Transactions catalogue
+
+Toutes les connexions catalogue activent `foreign_keys=ON`, un `busy_timeout` configuré, WAL et `synchronous=FULL`. Les writers utilisent `BEGIN IMMEDIATE`; un seul propriétaire produit les modèles SQLAlchemy et les migrations Alembic.
+
+`catalog_meta.revision` commence à zéro après migration. Une transaction validée qui contient au moins une mutation visible l'incrémente exactement une fois dans la même transaction. Une lecture, un no-op, un rollback ou un échec ne l'incrémente pas.
+
+Une lecture cohérente utilise un `CatalogSnapshot`: la révision et les lignes sont lues dans la même transaction read-only. Aucun iterator ne survit à la fermeture de ce contexte.
+
+## Publication de l'index FTS5
+
+1. Ouvrir un snapshot catalogue et mémoriser sa révision.
+2. Construire une base candidate dans un fichier sibling.
+3. Insérer documents, passages et métadonnées dans une transaction stable.
+4. Exécuter `PRAGMA quick_check`, contrôler les compteurs et calculer le SHA-256.
+5. Prendre un `CatalogRevisionGuard` avec `BEGIN IMMEDIATE`.
+6. Relire la révision sous cette garde et abandonner si elle diffère.
+7. Publier l'index et son reçu privé par `os.replace` avant de libérer la garde.
+
+Une erreur ou une révision obsolète laisse l'index publié précédent intact. Le service de recherche ouvre l'index en `mode=ro` avec `query_only=ON` et ne déclenche ni réseau, ni ingestion, ni analyse.
+
+## Flux d'analyse et preuves durables
+
+1. Résoudre une version et un artefact stable, puis vérifier son SHA-256.
+2. Extraire sous limites et produire des passages déterministes.
+3. Traiter le texte du papier comme donnée non fiable, jamais comme instruction système.
+4. Appeler un backend LLM injecté avec un schéma de sortie fermé et versionné.
+5. Enregistrer la tentative, le stop reason, les claims et leurs passages probants.
+6. Publier `complete` seulement si chaque claim possède au moins une preuve valide.
+
+Les passages utilisés comme preuves sont conservés dans le catalogue avec leur artefact et leurs offsets. L'index FTS reste une projection remplaçable. Une sortie invalide ou tronquée ne remplace jamais un cache valide.
+
+## Interface CLI cible
+
+Les commandes suivantes sont des contrats cibles, pas une preuve de disponibilité:
+
+- `paper-insights discover` et `paper-insights ingest` pour l'acquisition;
+- `paper-insights search`, `paper-insights index` et `paper-insights cite` pour la recherche;
+- `paper-insights collections` pour les mutations de collections hors MCP;
+- `paper-insights watch` pour la veille appelée par un scheduler externe;
+- `paper-insights analyze` et `paper-insights authors` pour les gates ultérieures;
+- `paper-insights repair interrupted-runs --yes` pour la récupération explicite;
+- `paper-insights mcp serve` pour la façade locale read-only.
+
+`doctor` reste strictement sans écriture et sans réseau. Le scheduler reste externe; aucun worker web ou scheduler embarqué n'est ajouté.
+
+## Sécurité et évolution
+
+- tous les chemins résolus restent sous `data_root` et les fichiers temporaires sont privés;
+- schémas, hôtes, redirections, délais et tailles sont contrôlés par provider;
+- les erreurs publiques portent un code stable et un message nettoyé;
+- les réponses MCP ouvrent SQLite en lecture seule et sont bornées;
+- aucun secret, corpus, PDF, base SQLite ou reçu privé n'entre dans Git;
+- PostgreSQL, Redis, embeddings, async, file distribuée ou interface web exigent une mesure et un ADR séparé.
+
+Décisions associées: [ADR-0001](decisions/ADR-0001-python-sqlite.md), [ADR-0002](decisions/ADR-0002-versioned-observations-and-provenance.md), [ADR-0003](decisions/ADR-0003-preview-manifest-and-publication.md) et [ADR-0004](decisions/ADR-0004-modular-monolith-ports.md).
