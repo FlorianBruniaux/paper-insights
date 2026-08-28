@@ -1,0 +1,22 @@
+CHANGELOG.md
+  s_e8d43ee83cdf95::t_d69273603b7589 16
+docs/superpowers/plans/2026-08-28-complete-program-execution.md
+  s_e8d43ee83cdf95::t_d69273603b7589 1-519,522-523,525-552,554-584,586-624,627-629,631-667,669-838
+  s_e8d43ee83cdf95::t_1802cf8efb5eb1 520-521,524,553,585,625-626,630,668
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "53e026ef220fbb74888342c5aaa8578cb66d77bd",
+  "prompts": {},
+  "sessions": {
+    "s_e8d43ee83cdf95": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a049b3-e0f7-7682-ac4a-ce8a2dbabcac",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Florian BRUNIAUX <florian@bruniaux.com>"
+    }
+  }
+}
