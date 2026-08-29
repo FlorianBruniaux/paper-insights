@@ -1,0 +1,37 @@
+tests/providers/test_arxiv_pagination.py
+  s_2f2b8a177ba283::t_3893b0213e9a5d 116-143
+  s_2f2b8a177ba283::t_cdaa10300ef6be 93-115
+src/paper_insights/adapters/providers/arxiv/client.py
+  s_2f2b8a177ba283::t_c4dc95cfe7d86c 4,77,199-208,274,290,327
+  s_2f2b8a177ba283::t_7e68b314b2d989 251-255
+src/paper_insights/adapters/providers/arxiv/normalizer.py
+  s_2f2b8a177ba283::t_c4dc95cfe7d86c 16,137-143,149
+  s_2f2b8a177ba283::t_d3dd27fe765499 10,134,144-148
+tests/providers/test_arxiv_parser.py
+  s_2f2b8a177ba283::t_b9d097bbb760f0 8,35,37,51,82,113
+  s_2f2b8a177ba283::t_cdaa10300ef6be 83-112
+  s_2f2b8a177ba283::t_0d2030793f8778 5
+  s_2f2b8a177ba283::t_aa22e9158046b9 7
+tests/providers/test_arxiv_client.py
+  s_2f2b8a177ba283::t_b9d097bbb760f0 150-170
+  s_2f2b8a177ba283::t_97e11027b9ba77 171-172
+src/paper_insights/adapters/providers/arxiv/parser.py
+  s_2f2b8a177ba283::t_c4dc95cfe7d86c 30-37,47-53,56,60-61,94-95
+  s_2f2b8a177ba283::t_2c166e33b64ce2 90-91
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "f321cd5cb3c9d5fda6ab96604345e54d22ad63ad",
+  "prompts": {},
+  "sessions": {
+    "s_2f2b8a177ba283": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a04a7c-f938-7500-b20e-0faa6c4019c5",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Florian BRUNIAUX <florian@bruniaux.com>"
+    }
+  }
+}
