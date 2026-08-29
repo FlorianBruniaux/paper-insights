@@ -66,7 +66,11 @@ def _metadata_data(observation: ObservedPaperVersion) -> dict[str, object]:
         ],
         "comment": observation.comment,
         "identifiers": [
-            {"canonical_value": item.canonical_value, "scheme": item.scheme}
+            {
+                "canonical_value": item.canonical_value,
+                "scheme": item.scheme,
+                "scope": item.scope.value,
+            }
             for item in observation.identifiers
         ],
         "journal_reference": observation.journal_reference,
