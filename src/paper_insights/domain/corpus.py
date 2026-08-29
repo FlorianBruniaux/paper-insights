@@ -4,7 +4,7 @@ import json
 import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from enum import Enum
+from enum import Enum, StrEnum
 from pathlib import Path
 from uuid import UUID
 
@@ -13,6 +13,7 @@ from paper_insights.domain.acquisition import (
     PreparedDiscovery,
     RecordLocator,
 )
+from paper_insights.domain.errors import PUBLIC_ERROR_MESSAGES, ErrorCode
 from paper_insights.domain.identifiers import (
     ArtifactId,
     CollectionId,
@@ -41,6 +42,24 @@ class IngestionOutcome(str, Enum):
     METADATA_UPDATE = "metadata_update"
     UNCHANGED = "unchanged"
     FAILED = "failed"
+
+
+class IngestionFailureStage(StrEnum):
+    CATALOG_WRITE = "catalog_write"
+    RECOVERY = "recovery"
+
+
+class InterruptedRunRepairOutcome(StrEnum):
+    REPAIRED = "repaired"
+    NOT_ELIGIBLE = "not_eligible"
+
+
+_INGESTION_FAILURE_CODES = {
+    (IngestionFailureStage.CATALOG_WRITE, ErrorCode.RECORD_INVALID),
+    (IngestionFailureStage.CATALOG_WRITE, ErrorCode.ARTIFACT_INVALID),
+    (IngestionFailureStage.CATALOG_WRITE, ErrorCode.CATALOG_CONFLICT),
+    (IngestionFailureStage.RECOVERY, ErrorCode.INTERRUPTED),
+}
 
 
 class ArtifactKind(str, Enum):
@@ -168,19 +187,6 @@ class RecordObservation:
 
 
 @dataclass(frozen=True, slots=True)
-class RecordObservationResult:
-    paper_id: PaperId
-    paper_version_id: PaperVersionId
-    version_observation_id: VersionObservationId
-    outcome: IngestionOutcome
-    created_paper: bool
-
-    def __post_init__(self) -> None:
-        if self.created_paper and self.outcome is not IngestionOutcome.NEW_VERSION:
-            raise ValueError("created_paper is valid only for a new version")
-
-
-@dataclass(frozen=True, slots=True)
 class AttachPreparedRun:
     run_id: RunId
     prepared: PreparedDiscovery
@@ -234,13 +240,67 @@ class AttachPreparedRun:
 
 
 @dataclass(frozen=True, slots=True)
+class AttachedSnapshotRef:
+    page_ordinal: int
+    snapshot_id: SnapshotId
+
+    def __post_init__(self) -> None:
+        if self.page_ordinal < 0:
+            raise ValueError("snapshot page ordinal cannot be negative")
+
+
+@dataclass(frozen=True, slots=True)
 class IngestionRunRef:
     run_id: RunId
     revision: int
+    snapshots: tuple[AttachedSnapshotRef, ...] = ()
 
     def __post_init__(self) -> None:
+        require_tuples(self, "snapshots")
         if self.revision < 0:
             raise ValueError("catalog revision cannot be negative")
+        ordinals = tuple(snapshot.page_ordinal for snapshot in self.snapshots)
+        if ordinals != tuple(range(len(self.snapshots))):
+            raise ValueError("attached snapshots must be contiguous and ordered")
+        if len({snapshot.snapshot_id for snapshot in self.snapshots}) != len(
+            self.snapshots
+        ):
+            raise ValueError("attached snapshot IDs must be unique")
+
+    def snapshot_id_for(self, page_ordinal: int) -> SnapshotId:
+        if page_ordinal < 0 or page_ordinal >= len(self.snapshots):
+            raise KeyError(page_ordinal)
+        return self.snapshots[page_ordinal].snapshot_id
+
+
+@dataclass(frozen=True, slots=True)
+class InterruptedRunCandidate:
+    run_id: RunId
+    started_at: datetime
+    selected_records: int
+    recorded_items: int
+
+    def __post_init__(self) -> None:
+        _require_utc(self.started_at, "ingestion run start timestamp")
+        if self.selected_records < 0 or not 0 <= self.recorded_items <= self.selected_records:
+            raise ValueError("interrupted run item counts are invalid")
+
+    @property
+    def missing_records(self) -> int:
+        return self.selected_records - self.recorded_items
+
+
+@dataclass(frozen=True, slots=True)
+class RepairInterruptedRun:
+    run_id: RunId
+    cutoff: datetime
+    occurred_at: datetime
+
+    def __post_init__(self) -> None:
+        _require_utc(self.cutoff, "interrupted run cutoff")
+        _require_utc(self.occurred_at, "interrupted run repair timestamp")
+        if self.occurred_at < self.cutoff:
+            raise ValueError("repair timestamp cannot precede its cutoff")
 
 
 @dataclass(frozen=True, slots=True)
@@ -250,20 +310,103 @@ class RecordIngestionItem:
 
 
 @dataclass(frozen=True, slots=True)
-class IngestionItemRef:
+class RecordIngestionFailure:
     run_id: RunId
+    snapshot_id: SnapshotId
     record_ordinal: int
-    outcome: IngestionOutcome
+    stage: IngestionFailureStage
+    code: ErrorCode
+    occurred_at: datetime
 
     def __post_init__(self) -> None:
         if self.record_ordinal < 0:
             raise ValueError("record ordinal cannot be negative")
+        if not isinstance(self.stage, IngestionFailureStage):
+            raise ValueError("ingestion failure stage is invalid")
+        if not isinstance(self.code, ErrorCode):
+            raise ValueError("ingestion failure code is invalid")
+        if (self.stage, self.code) not in _INGESTION_FAILURE_CODES:
+            raise ValueError("ingestion failure stage or code is invalid")
+        _require_utc(self.occurred_at, "ingestion failure timestamp")
+
+    @property
+    def message(self) -> str:
+        return PUBLIC_ERROR_MESSAGES[self.code]
+
+    @classmethod
+    def from_code(
+        cls,
+        *,
+        run_id: RunId,
+        snapshot_id: SnapshotId,
+        record_ordinal: int,
+        stage: IngestionFailureStage,
+        code: ErrorCode,
+        occurred_at: datetime,
+    ) -> RecordIngestionFailure:
+        if (stage, code) not in _INGESTION_FAILURE_CODES:
+            raise ValueError("unsupported ingestion failure stage and code")
+        return cls(
+            run_id=run_id,
+            snapshot_id=snapshot_id,
+            record_ordinal=record_ordinal,
+            stage=stage,
+            code=code,
+            occurred_at=occurred_at,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class IngestionItemRef:
+    run_id: RunId
+    snapshot_id: SnapshotId
+    record_ordinal: int
+    outcome: IngestionOutcome
+    paper_id: PaperId | None = None
+    paper_version_id: PaperVersionId | None = None
+    version_observation_id: VersionObservationId | None = None
+    created_paper: bool = False
+
+    def __post_init__(self) -> None:
+        if self.record_ordinal < 0:
+            raise ValueError("record ordinal cannot be negative")
+        if not isinstance(self.outcome, IngestionOutcome):
+            raise ValueError("ingestion item outcome is invalid")
+        identities = (self.paper_id, self.paper_version_id, self.version_observation_id)
+        if self.outcome is IngestionOutcome.FAILED:
+            if any(value is not None for value in identities) or self.created_paper:
+                raise ValueError("failed ingestion item cannot reference corpus entities")
+            return
+        if any(value is None for value in identities):
+            raise ValueError("successful ingestion item requires corpus entity references")
+        if self.created_paper and self.outcome is not IngestionOutcome.NEW_VERSION:
+            raise ValueError("created_paper is valid only for a new version")
 
 
 @dataclass(frozen=True, slots=True)
 class IngestionSummary:
     run_id: RunId
     counters: RunCounters
+
+
+@dataclass(frozen=True, slots=True)
+class InterruptedRunRepairResult:
+    run_id: RunId
+    outcome: InterruptedRunRepairOutcome
+    summary: IngestionSummary | None
+    revision: int
+
+    def __post_init__(self) -> None:
+        if self.revision < 0:
+            raise ValueError("catalog revision cannot be negative")
+        if not isinstance(self.outcome, InterruptedRunRepairOutcome):
+            raise ValueError("interrupted run repair outcome is invalid")
+        if (self.outcome is InterruptedRunRepairOutcome.REPAIRED) != (
+            self.summary is not None
+        ):
+            raise ValueError("repair summary must exist exactly when a run was repaired")
+        if self.summary is not None and self.summary.run_id != self.run_id:
+            raise ValueError("repair summary belongs to another run")
 
 
 @dataclass(frozen=True, slots=True)

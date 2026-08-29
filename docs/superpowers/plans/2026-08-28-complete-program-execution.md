@@ -331,7 +331,7 @@ Commit: `feat: freeze domain and application ports`
 - Create: `tests/catalog/test_uow.py`
 - Create: `tests/catalog/test_snapshot.py`
 
-**Required schema:** `catalog_meta`, `sources`, `stored_blobs`, `source_snapshots`, `snapshot_records`, `ingestion_runs`, `ingestion_run_items`, `collection_errors`, `papers`, `paper_versions`, `version_observations`, `paper_identifiers`, `paper_identifier_evidence`, `version_identifiers`, `version_identifier_evidence`, `authors`, `author_identifiers`, `author_identifier_evidence`, `paper_authors`, `paper_version_categories`, `artifacts`, `collections`, `collection_papers`.
+**Required schema:** `catalog_meta`, `sources`, `stored_blobs`, `source_snapshots`, `snapshot_records`, `ingestion_runs`, `ingestion_run_snapshots`, `ingestion_run_selected_records`, `ingestion_run_items`, `collection_errors`, `papers`, `paper_versions`, `version_observations`, `paper_identifiers`, `paper_identifier_evidence`, `version_identifiers`, `version_identifier_evidence`, `authors`, `author_identifiers`, `author_identifier_evidence`, `paper_authors`, `paper_version_categories`, `artifacts`, `collections`, `collection_papers`.
 
 **Steps:**
 
@@ -340,6 +340,8 @@ Commit: `feat: freeze domain and application ports`
 - [ ] Implement one-item `BEGIN IMMEDIATE` units of work and read-only snapshot readers.
 - [ ] Increment `catalog_meta.revision` inside visible mutation transactions.
 - [ ] Prove two concurrent writers respect `busy_timeout` and never corrupt counts.
+- [ ] Prove snapshot mapping replay, strict immutable source-graph collision checks that preserve enriched observation links, persisted ordered selection, composite run/selection/item/error FKs, same-source enforcement, explicit version-observation origin provenance, multi-page item identity and `record_failure` first-write `+1`, identical no-op and divergent conflict semantics with one unique `collection_error` per failed item.
+- [ ] Prove interrupted-run preview is read-only and each confirmed repair revalidates under `BEGIN IMMEDIATE`, creates all missing recovery items, finalizes and increments exactly one revision or returns `not_eligible` without mutation.
 
 **Verification:**
 
@@ -369,6 +371,7 @@ Commit: `feat: add revisioned sqlite catalog`
 **Steps:**
 
 - [ ] Write failing fixture tests for namespaces, ordered authors, missing DOI, all categories and v1/v2 history.
+- [ ] Declare every additional observed identifier with an explicit paper/version scope; never make the catalogue infer scope from a scheme name.
 - [ ] Stream responses under a configured byte limit and reject unexpected scheme, host or redirect target.
 - [ ] Implement deterministic pagination, overlap deduplication and stop-at-limit semantics.
 - [ ] Bound retries for timeout, 429 and 5xx; honor bounded `Retry-After`; never retry permanent 4xx.
@@ -451,6 +454,7 @@ Commit: `feat: add installable local platform foundation`
 - [ ] Digest canonical query, every selected page/record locator with raw-record SHA-256, and, for every ordered raw page, capture UUIDv7, SHA-256, retrieval timestamp and request fingerprint.
 - [ ] Reject expired or mismatched confirmation before opening a run.
 - [ ] Publish raw and canonical metadata blobs outside SQL transactions, then attach all snapshots and records with run creation in one transaction before processing one record per short transaction.
+- [ ] Reuse the stable ordered snapshot mapping returned by attachment for item commands, record an idempotent closed failed item after rolling back any failed item transaction, and repair every persisted selected record left without an item as `recovery/interrupted` after cutoff and locked eligibility revalidation.
 - [ ] Inject crashes before blob replace, after blob publication and before the snapshot/run commit; prove no partial snapshot graph becomes visible.
 - [ ] Record exact success/failure counters and make a repeated batch unchanged.
 - [ ] Implement explicit `RepairInterruptedRuns`, never invoked by doctor.

@@ -32,3 +32,12 @@ Toutes les modifications notables du projet sont consignées ici.
 - Les passages vérifient leur identité déterministe, les acquisitions de texte exigent HTTPS et les résultats de citation utilisent un vocabulaire d'avertissements fermé.
 - Les deux couches internes refusent les imports d'infrastructure et tous les champs tuple des DTO rejettent les alias de collections mutables.
 - Pydantic reste interdit dans le domaine, les ports et l'application hors du futur module exact de validation de la frontière LLM prévu par WP-40.
+- L'attachement retourne un mapping stable des snapshots réutilisé au replay; les échecs d'item disposent d'un contrat fermé, traçable et idempotent après rollback.
+- La réparation matérialise chaque record sélectionné non traité en échec `recovery/interrupted`; les références d'item incluent le snapshot et les messages d'erreur sont dérivés d'un vocabulaire fermé.
+- Les runs persistent séparément leurs pages et leur sélection ordonnée, ce qui rend la reprise exacte possible sans décoder un digest ni confondre les records exclus.
+- Les échecs de connexion source ont un code public distinct des timeouts et des réponses invalides.
+- La reprise des runs interrompues possède des DTO et ports fermés pour la preview read-only, la revalidation verrouillée et la mutation atomique à révision unique.
+- Les captures dupliquées sont refusées et les FKs composites ferment désormais l'appartenance entre run, source, sélection, item et erreur.
+- Chaque observation de version conserve son record sélectionné d'origine, ce qui rend la reconstruction de page déterministe même après replay d'une capture.
+- `record_item` devient l'unique mutation atomique du corpus et de l'item, et son résultat restitue les identifiants créés sans perdre le `run_id` de provenance.
+- Les identifiants provider et additionnels déclarent désormais explicitement leur portée papier ou version, sans convention silencieuse côté catalogue.

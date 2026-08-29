@@ -68,13 +68,13 @@ Une ligne représente une page ou réponse brute qui peut contenir plusieurs pap
 | `capture_id` | UUIDv7 créé à la collecte, unique |
 | `source_id` | FK vers `sources` |
 | `stored_blob_id` | FK vers `stored_blobs` |
-| `prepared_digest` | SHA-256 du `PreparedDiscovery` exécuté |
-| `page_ordinal` | entier positif ou nul |
 | `request_fingerprint` | SHA-256 de la requête HTTP canonique |
 | `retrieved_at` | UTC, date de récupération source |
 | `next_cursor` | nullable, opaque |
 
-Contrainte unique: `(prepared_digest, page_ordinal)`. Le digest couvre pour chaque page son `capture_id`, son SHA-256, son `retrieved_at` et son `request_fingerprint`. Rejouer le même objet `PreparedDiscovery` ne crée pas un second snapshot. Une nouvelle collecte du même payload reçoit un nouveau `capture_id`, donc un nouveau digest et un nouvel événement source, tout en réutilisant le même blob adressé par contenu.
+Un snapshot est l'événement source identifié par `capture_id`, indépendamment de la sélection qui l'utilise. Un batch refuse deux pages portant le même `capture_id`. Rejouer une sélection ou préparer une autre sélection sur la même capture réutilise ce snapshot uniquement si source, blob, empreinte de requête, date, curseur et graphe source ordonné des `snapshot_records` sont identiques. Ce graphe immuable compare seulement ordinal, `source_item_id`, `source_version_key` et `raw_record_sha256`. Le lien enrichi `version_observation_id` n'appartient pas à la collision: un replay le conserve sans le comparer, le remettre à NULL ni l'écraser. Toute collision divergente du graphe source produit `catalog_conflict` sans mutation. Une nouvelle collecte du même payload reçoit un nouveau `capture_id` et crée un nouvel événement source, tout en réutilisant le blob adressé par contenu.
+
+`attach_prepared_run` génère les `source_snapshots.id` lors du premier attachement et retourne leur mapping ordonné dans `IngestionRunRef`. Au replay du même digest, il retourne exactement les identifiants existants. Le traitement ultérieur d'un record réutilise ce mapping sans requête de résolution implicite.
 
 ### `snapshot_records`
 
@@ -90,6 +90,32 @@ Contrainte unique: `(prepared_digest, page_ordinal)`. Le digest couvre pour chaq
 Clé primaire: `(source_snapshot_id, ordinal)`. Plusieurs occurrences peuvent pointer vers la même observation normalisée. Un échec conserve son snapshot et son ordinal sans inventer d'observation.
 
 Une réponse multi-papiers est toujours un `source_snapshot`. `source_response` n'est pas un kind d'artefact de papier.
+
+### `ingestion_run_snapshots`
+
+Cette table relie explicitement une run aux captures de son manifeste:
+
+| Colonne | Règle |
+| --- | --- |
+| `run_id` | FK vers `ingestion_runs` |
+| `page_ordinal` | position positive ou nulle dans le manifeste |
+| `source_snapshot_id` | FK vers `source_snapshots` |
+| `source_id` | composante répétée pour fermer l'égalité de source |
+
+Clé primaire: `(run_id, page_ordinal)`. Contrainte unique: `(run_id, source_snapshot_id)`. Les FKs composites `(run_id, source_id) -> ingestion_runs(id, source_id)` et `(source_snapshot_id, source_id) -> source_snapshots(id, source_id)` imposent la même source. Les parents exposent les contraintes uniques composites correspondantes. `IngestionRunRef.snapshots` restitue cette table dans l'ordre des pages.
+
+### `ingestion_run_selected_records`
+
+Cette table persiste le sous-ensemble confirmé, distinct de tous les records présents dans les pages:
+
+| Colonne | Règle |
+| --- | --- |
+| `run_id` | FK vers `ingestion_runs` |
+| `selection_ordinal` | ordre déterministe de sélection, positif ou nul |
+| `source_snapshot_id` | composante de la FK vers `snapshot_records` |
+| `record_ordinal` | composante de la FK vers `snapshot_records` |
+
+Clé primaire: `(run_id, selection_ordinal)`. Contrainte unique: `(run_id, source_snapshot_id, record_ordinal)`. La FK `(run_id, source_snapshot_id) -> ingestion_run_snapshots(run_id, source_snapshot_id)` ferme l'appartenance au manifeste et la FK `(source_snapshot_id, record_ordinal) -> snapshot_records(source_snapshot_id, ordinal)` ferme l'existence du record. La création de run vérifie que le nombre de lignes égale `selected_records`. La réparation utilise uniquement ces lignes, jamais tous les records des pages ni le digest non décodable.
 
 ## Corpus versionné
 
@@ -125,6 +151,9 @@ Un index unique partiel garantit une seule version courante par `(paper_id, sour
 | `paper_version_id` | FK vers `paper_versions` |
 | `normalized_sha256` | empreinte du JSON bibliographique canonique |
 | `observed_at` | UTC |
+| `origin_run_id` | composante de la provenance d'origine |
+| `origin_source_snapshot_id` | composante de la provenance d'origine |
+| `origin_record_ordinal` | composante de la provenance d'origine |
 | `title` | obligatoire |
 | `title_normalized` | obligatoire |
 | `abstract` | nullable |
@@ -135,7 +164,7 @@ Un index unique partiel garantit une seule version courante par `(paper_id, sour
 | `submitted_at` | nullable, UTC |
 | `announced_at` | nullable, UTC |
 
-Contrainte unique: `(paper_version_id, normalized_sha256)`. Une correction de métadonnées sur une version connue crée une nouvelle observation et conserve l'ancienne. Une observation déjà connue est réutilisée et le nouveau `snapshot_record` y est relié.
+Contrainte unique: `(paper_version_id, normalized_sha256)`. La FK composite `(origin_run_id, origin_source_snapshot_id, origin_record_ordinal) -> ingestion_run_selected_records(run_id, source_snapshot_id, record_ordinal)` conserve le record sélectionné qui a créé l'observation. Son `page_ordinal` se dérive uniquement de `ingestion_run_snapshots` pour cette run et ce snapshot, jamais d'un item de replay choisi arbitrairement. Une correction de métadonnées sur une version connue crée une nouvelle observation et conserve l'ancienne. Une observation déjà connue est réutilisée et le nouveau `snapshot_record` y est relié sans modifier sa provenance d'origine.
 
 L'observation courante d'une version est la dernière selon `(observed_at, id)`. La citation d'une version explicite peut aussi sélectionner une observation explicite lorsque la provenance doit être reproduite.
 
@@ -177,6 +206,8 @@ Clé primaire: `(version_observation_id, position)`. Contrainte unique additionn
 ## Identifiants externes avec vraies clés étrangères
 
 Les associations polymorphiques sont interdites.
+
+À l'ingestion, `source_item_id` produit toujours un `paper_identifier` dont le scheme est `source_id`, et `source_version_key` produit toujours un `version_identifier` du même scheme. Chaque `ObservedIdentifier` additionnel porte un `IdentifierScope` fermé, `paper` ou `version`, qui détermine la table cible. Aucun adapter catalogue ne déduit ce scope du nom du scheme. Par exemple, le provider arXiv déclare explicitement le scope du DOI normalisé qu'il observe.
 
 ### `paper_identifiers`
 
@@ -230,7 +261,7 @@ Chaque record sélectionné possède un item avec snapshot, ordinal, identifiant
 - `unchanged`: le hash normalisé existe déjà;
 - `failed`: aucune mutation corpus de cet item n'est committée.
 
-`created_paper` est vrai uniquement pour `new_version`. Contrainte unique: `(run_id, source_snapshot_id, record_ordinal)`.
+`created_paper` est vrai uniquement pour `new_version`. Contrainte unique: `(run_id, source_snapshot_id, record_ordinal)`, également FK vers `ingestion_run_selected_records(run_id, source_snapshot_id, record_ordinal)`. Aucun item ne peut donc viser un record non sélectionné.
 
 À la finalisation, les compteurs sont recalculés depuis les items et doivent respecter:
 
@@ -248,7 +279,7 @@ Statut final:
 
 ### `collection_errors`
 
-Une erreur référence `run_id`, l'item ou le snapshot record, une étape fermée, un code stable, un message nettoyé et `occurred_at`. Elle ne contient ni traceback, ni secret, ni URL signée.
+Une erreur d'item référence `run_id`, le snapshot record, une combinaison fermée d'étape et de code, un message public calculé depuis le code et `occurred_at`. `catalog_write` accepte `record_invalid`, `artifact_invalid` ou `catalog_conflict`; `recovery` accepte uniquement `interrupted` pour un record sélectionné resté sans item. Aucun message libre ne traverse le DTO. Après rollback de l'item métier, le premier `record_failure` crée atomiquement l'item `failed` et son unique erreur dans une transaction courte distincte, avec une révision. Contrainte unique et FK `(run_id, source_snapshot_id, record_ordinal) -> ingestion_run_items(run_id, source_snapshot_id, record_ordinal)`. Un replay de même stage et code ne mute rien et conserve le premier `occurred_at`; un replay divergent ou en conflit avec un item réussi produit `catalog_conflict`. Une erreur purement liée à la run ne crée pas d'item. La réparation crée toutefois un item `recovery/interrupted` pour chaque record sélectionné non traité, car chacun est bien un record sélectionné non committé et participe à `failed_records`. Tous les items et erreurs manquants d'une même run sont créés dans la transaction de réparation, qui finalise les compteurs et incrémente la révision une seule fois.
 
 ## Artefacts d'une version
 

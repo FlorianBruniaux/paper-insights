@@ -4,16 +4,27 @@ import hashlib
 import json
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from enum import StrEnum
 from uuid import UUID
 
-from paper_insights.domain.errors import ErrorCode
+from paper_insights.domain.errors import PUBLIC_ERROR_MESSAGES, ErrorCode
 from paper_insights.domain.identifiers import Sha256, SourceId
 from paper_insights.domain.validation import require_tuples
-
 
 PREVIEW_SCHEMA_VERSION = "discovery-preview-v1"
 PREPARED_SCHEMA_VERSION = "prepared-discovery-v1"
 MAX_PREVIEW_AGE = timedelta(minutes=15)
+_DISCOVERY_ISSUE_CODES = frozenset(
+    {
+        ErrorCode.SOURCE_CONNECTION_FAILED,
+        ErrorCode.SOURCE_TIMEOUT,
+        ErrorCode.SOURCE_RATE_LIMITED,
+        ErrorCode.SOURCE_RESPONSE_TOO_LARGE,
+        ErrorCode.SOURCE_INVALID_PAYLOAD,
+        ErrorCode.SOURCE_REDIRECT_REFUSED,
+        ErrorCode.RECORD_INVALID,
+    }
+)
 
 
 def _require_utc(value: datetime, field: str) -> None:
@@ -114,14 +125,22 @@ class ObservedCategory:
             raise ValueError("observed category is required")
 
 
+class IdentifierScope(StrEnum):
+    PAPER = "paper"
+    VERSION = "version"
+
+
 @dataclass(frozen=True, slots=True)
 class ObservedIdentifier:
     scheme: str
     canonical_value: str
+    scope: IdentifierScope
 
     def __post_init__(self) -> None:
         if not self.scheme or not self.canonical_value:
             raise ValueError("observed identifier requires scheme and value")
+        if not isinstance(self.scope, IdentifierScope):
+            raise ValueError("observed identifier scope is invalid")
 
 
 @dataclass(frozen=True, slots=True)
@@ -202,17 +221,22 @@ class DiscoveryPage:
 @dataclass(frozen=True, slots=True)
 class DiscoveryIssue:
     code: ErrorCode
-    message: str
     page_ordinal: int | None = None
     record_ordinal: int | None = None
 
     def __post_init__(self) -> None:
-        if not self.message:
-            raise ValueError("discovery issue message is required")
+        if not isinstance(self.code, ErrorCode):
+            raise ValueError("discovery issue code is invalid")
+        if self.code not in _DISCOVERY_ISSUE_CODES:
+            raise ValueError("error code is not valid for discovery")
         if self.page_ordinal is not None and self.page_ordinal < 0:
             raise ValueError("issue page ordinal cannot be negative")
         if self.record_ordinal is not None and self.record_ordinal < 0:
             raise ValueError("issue record ordinal cannot be negative")
+
+    @property
+    def message(self) -> str:
+        return PUBLIC_ERROR_MESSAGES[self.code]
 
 
 @dataclass(frozen=True, slots=True)
@@ -225,6 +249,9 @@ class DiscoveryBatch:
 
     def __post_init__(self) -> None:
         require_tuples(self, "pages", "records", "issues")
+        capture_ids = tuple(page.capture_id for page in self.pages)
+        if len(set(capture_ids)) != len(capture_ids):
+            raise ValueError("batch capture IDs must be unique")
         flattened = tuple(
             record.observation
             for page in self.pages

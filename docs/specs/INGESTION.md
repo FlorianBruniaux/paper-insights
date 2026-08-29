@@ -89,9 +89,11 @@ Pour toutes les pages confirmées:
 2. publier pour chaque observation sélectionnée le JSON bibliographique canonique comme blob `metadata` content-addressed;
 3. ouvrir une transaction `BEGIN IMMEDIATE` unique;
 4. attacher tous les `source_snapshots` et leurs `snapshot_records` ordonnés;
-5. créer la run liée au même `prepared_digest`;
+5. créer la run liée au même `prepared_digest`, ses liens ordonnés vers les snapshots et les locators sélectionnés;
 6. incrémenter la révision catalogue une fois et valider;
 7. seulement ensuite ouvrir les transactions courtes par record.
+
+Pour chaque record, `source_item_id` devient l'identifiant papier canonique du provider et `source_version_key` son identifiant de version. Les autres identifiants observés déclarent obligatoirement leur scope `paper` ou `version`; l'ingestion ne route jamais un DOI ou un autre scheme par convention implicite.
 
 Les blobs sont publiés hors transaction SQL. Un échec avant `os.replace` ne laisse aucun fichier final. Un échec SQL après publication laisse seulement des blobs orphelins que `doctor` signale sans les supprimer. Aucun snapshot ni record partiel n'est visible. Les tests d'injection de panne couvrent une interruption avant publication, après publication des blobs et avant le commit SQL.
 
@@ -138,6 +140,8 @@ Les compteurs ont exactement ces sens:
 - `unchanged_records`: hash normalisé déjà connu;
 - `failed_records`: records sélectionnés non committés dans le corpus.
 
+`attach_prepared_run` retourne le `snapshot_id` stable de chaque page dans un mapping ordonné; un replay du même manifeste rend le même mapping. La sélection confirmée est persistée dans `ingestion_run_selected_records`, avec son ordre et ses FKs vers les records source. Si une transaction d'item échoue, elle est rollbackée entièrement, puis `record_failure` enregistre séparément un outcome `failed` et une erreur publique dérivée de sa combinaison étape-code. Le retry de même stage et code est sans mutation, ignore le nouveau timestamp et conserve le premier; le retry divergent échoue. Aucun message libre ne traverse ce contrat. Une erreur purement liée à la run ne devient pas un item. Lors d'une réparation, chaque record sélectionné persisté mais resté sans item reçoit en revanche un item `recovery/interrupted` et compte comme `failed_record`.
+
 La finalisation recalcule les compteurs depuis les items et refuse la transaction si:
 
 ```text
@@ -169,7 +173,7 @@ La récupération est une commande distincte:
 paper-insights repair interrupted-runs --yes
 ```
 
-Sans `--yes`, elle prévisualise les runs concernées et termine avec le code `3` sans mutation. Avec confirmation, elle marque les runs `running` antérieures au seuil comme `failed`, ajoute le code `interrupted`, finalise leurs compteurs depuis les items et incrémente la révision. La réparation est idempotente et ne rejoue pas le réseau.
+Sans `--yes`, `CatalogSnapshot.list_interrupted_runs(cutoff)` prévisualise uniquement les runs `running` dont `started_at` est antérieur au cutoff UTC calculé une fois, puis la commande termine avec le code `3` sans mutation. Avec confirmation, chaque `RepairInterruptedRun` réutilise ce cutoff et est reprise dans un `BEGIN IMMEDIATE`; son statut et son `started_at` sont revalidés sous verrou avant toute écriture. `repair_interrupted_run` compare `ingestion_run_selected_records` aux items existants, crée dans la même transaction tous les items et erreurs `recovery/interrupted` manquants, puis finalise les compteurs et incrémente la révision une seule fois. Elle peut devenir `partial`, `failed` ou `succeeded` si tous les items étaient déjà committés, y compris pour zéro sélection. `InterruptedRunRepairResult` distingue `repaired` de `not_eligible`; le retry ou une run devenue inéligible produit ce no-op sans nouvelle erreur ni révision. La réparation ne concurrence pas une run récente et ne rejoue pas le réseau.
 
 ## Pagination, délais et reprises
 
@@ -191,6 +195,7 @@ Une watchlist prépare puis exécute le même contrat avec fenêtre de recouvrem
 ## Erreurs fermées initiales
 
 - `source_timeout`
+- `source_connection_failed`
 - `source_rate_limited`
 - `source_response_too_large`
 - `source_invalid_payload`
@@ -202,7 +207,7 @@ Une watchlist prépare puis exécute le même contrat avec fenêtre de recouvrem
 - `preview_mismatch`
 - `interrupted`
 
-Chaque erreur publique contient version de schéma, code, étape et message nettoyé. Le traceback reste dans les logs de développement locaux si leur niveau l'autorise.
+Chaque erreur publique contient version de schéma, code, étape et message dérivé d'un mapping fermé. Aucun message libre ne traverse les DTO publics. Le traceback reste dans les logs de développement locaux si leur niveau l'autorise.
 
 ## arXiv P1
 

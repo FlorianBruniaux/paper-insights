@@ -20,7 +20,6 @@ from paper_insights.domain.acquisition import (
 from paper_insights.domain.errors import ErrorCode
 from paper_insights.domain.identifiers import Sha256, SourceId
 
-
 CAPTURE_ID = UUID("01890f3e-3b12-7cc0-98d6-4f6f94748f5a")
 NOW = datetime(2026, 8, 29, 8, 0, tzinfo=UTC)
 
@@ -111,6 +110,34 @@ def test_prepared_digest_is_deterministic_and_covers_query_locator_and_page() ->
     )
 
 
+def test_discovery_batch_rejects_duplicate_capture_ids() -> None:
+    batch = make_batch()
+    first_page = batch.pages[0]
+    second_observation = replace(
+        batch.records[0],
+        page_ordinal=1,
+        source_item_id="2608.05678",
+        source_version_key="2608.05678v1",
+    )
+    second_locator = replace(
+        first_page.records[0].locator,
+        page_ordinal=1,
+        source_item_id="2608.05678",
+        source_version_key="2608.05678v1",
+    )
+    second_page = replace(
+        first_page,
+        records=(DiscoveryRecord(second_locator, second_observation),),
+    )
+
+    with pytest.raises(ValueError, match="capture"):
+        replace(
+            batch,
+            pages=(first_page, second_page),
+            records=(batch.records[0], second_observation),
+        )
+
+
 def test_prepared_discovery_validates_expiry_and_manifest() -> None:
     batch = make_batch()
     prepared = PreparedDiscovery.prepare(
@@ -136,7 +163,7 @@ def test_prepared_discovery_validates_expiry_and_manifest() -> None:
             prepared,
             preview=replace(
                 prepared.preview,
-                issues=(DiscoveryIssue(ErrorCode.RECORD_INVALID, "bad record"),),
+                issues=(DiscoveryIssue(ErrorCode.RECORD_INVALID),),
             ),
         )
     with pytest.raises(ValueError):

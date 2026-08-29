@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from types import TracebackType
 from typing import Protocol
 
@@ -13,13 +14,15 @@ from paper_insights.domain.corpus import (
     IngestionItemRef,
     IngestionRunRef,
     IngestionSummary,
+    InterruptedRunCandidate,
+    InterruptedRunRepairResult,
     PaperIdentity,
     PaperView,
+    RecordIngestionFailure,
     RecordIngestionItem,
-    RecordObservation,
-    RecordObservationResult,
     RemoveCollectionPaper,
     RenameCollection,
+    RepairInterruptedRun,
 )
 from paper_insights.domain.identifiers import PaperSelector, RunId
 from paper_insights.domain.retrieval import CatalogRevision, IndexDocument
@@ -28,13 +31,17 @@ from paper_insights.domain.retrieval import CatalogRevision, IndexDocument
 class CorpusRepository(Protocol):
     def resolve_paper(self, selector: PaperSelector) -> PaperIdentity | None: ...
 
-    def record_observation(self, command: RecordObservation) -> RecordObservationResult: ...
-
 
 class IngestionRepository(Protocol):
     def attach_prepared_run(self, command: AttachPreparedRun) -> IngestionRunRef: ...
 
     def record_item(self, command: RecordIngestionItem) -> IngestionItemRef: ...
+
+    def record_failure(self, command: RecordIngestionFailure) -> IngestionItemRef: ...
+
+    def repair_interrupted_run(
+        self, command: RepairInterruptedRun
+    ) -> InterruptedRunRepairResult: ...
 
     def finalize_run(self, run_id: RunId) -> IngestionSummary: ...
 
@@ -89,6 +96,10 @@ class CatalogSnapshot(Protocol):
     def list_index_documents(self) -> tuple[IndexDocument, ...]: ...
 
     def list_collections(self) -> tuple[CollectionView, ...]: ...
+
+    def list_interrupted_runs(
+        self, cutoff: datetime
+    ) -> tuple[InterruptedRunCandidate, ...]: ...
 
     def get_citation_input(self, selector: CitationSelector) -> CitationInput | None: ...
 

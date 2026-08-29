@@ -244,6 +244,7 @@ def test_all_announced_ports_are_protocols_sync_annotated_and_framework_free() -
         "CatalogSnapshot": {
             "get_citation_input",
             "get_paper",
+            "list_interrupted_runs",
             "list_collections",
             "list_index_documents",
         },
@@ -252,7 +253,7 @@ def test_all_announced_ports_are_protocols_sync_annotated_and_framework_free() -
         "CitationRenderer": {"render"},
         "Clock": {"now"},
         "CollectionRepository": {"add", "create", "remove", "rename"},
-        "CorpusRepository": {"record_observation", "resolve_paper"},
+        "CorpusRepository": {"resolve_paper"},
         "DiscoveryProvider": {"discover"},
         "EvidenceBundleWriter": {"write"},
         "FederatedCorpus": {"capabilities", "resolve_evidence", "search"},
@@ -261,7 +262,13 @@ def test_all_announced_ports_are_protocols_sync_annotated_and_framework_free() -
         "IdentityUnitOfWork": {"apply", "commit", "record_observations", "reverse", "rollback"},
         "IdentityUnitOfWorkFactory": {"begin"},
         "IdGenerator": {"new"},
-        "IngestionRepository": {"attach_prepared_run", "finalize_run", "record_item"},
+        "IngestionRepository": {
+            "attach_prepared_run",
+            "finalize_run",
+            "record_failure",
+            "record_item",
+            "repair_interrupted_run",
+        },
         "SearchIndexBuilder": {"build_candidate", "discard", "publish"},
         "SearchIndexReader": {"get_passage", "search_papers", "search_passages"},
         "TextExtractor": {"extract"},
@@ -296,6 +303,9 @@ def test_all_announced_ports_are_protocols_sync_annotated_and_framework_free() -
         "CatalogSnapshot.get_paper": "(self, selector: 'PaperSelector') -> 'PaperView | None'",
         "CatalogSnapshot.list_collections": "(self) -> 'tuple[CollectionView, ...]'",
         "CatalogSnapshot.list_index_documents": "(self) -> 'tuple[IndexDocument, ...]'",
+        "CatalogSnapshot.list_interrupted_runs": (
+            "(self, cutoff: 'datetime') -> 'tuple[InterruptedRunCandidate, ...]'"
+        ),
         "CatalogUnitOfWork.commit": "(self) -> 'None'",
         "CatalogUnitOfWork.rollback": "(self) -> 'None'",
         "CatalogUnitOfWorkFactory.begin": "(self) -> 'CatalogUnitOfWork'",
@@ -310,9 +320,6 @@ def test_all_announced_ports_are_protocols_sync_annotated_and_framework_free() -
             "(self, command: 'RemoveCollectionPaper') -> 'CollectionView'"
         ),
         "CollectionRepository.rename": "(self, command: 'RenameCollection') -> 'CollectionView'",
-        "CorpusRepository.record_observation": (
-            "(self, command: 'RecordObservation') -> 'RecordObservationResult'"
-        ),
         "CorpusRepository.resolve_paper": (
             "(self, selector: 'PaperSelector') -> 'PaperIdentity | None'"
         ),
@@ -339,8 +346,14 @@ def test_all_announced_ports_are_protocols_sync_annotated_and_framework_free() -
             "(self, command: 'AttachPreparedRun') -> 'IngestionRunRef'"
         ),
         "IngestionRepository.finalize_run": "(self, run_id: 'RunId') -> 'IngestionSummary'",
+        "IngestionRepository.record_failure": (
+            "(self, command: 'RecordIngestionFailure') -> 'IngestionItemRef'"
+        ),
         "IngestionRepository.record_item": (
             "(self, command: 'RecordIngestionItem') -> 'IngestionItemRef'"
+        ),
+        "IngestionRepository.repair_interrupted_run": (
+            "(self, command: 'RepairInterruptedRun') -> 'InterruptedRunRepairResult'"
         ),
         "SearchIndexBuilder.build_candidate": (
             "(self, request: 'IndexBuildRequest') -> 'IndexCandidate'"

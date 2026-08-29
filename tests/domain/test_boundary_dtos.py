@@ -15,6 +15,7 @@ from paper_insights.domain.acquisition import (
     DiscoveryPage,
     DiscoveryQuery,
     DiscoveryRecord,
+    IdentifierScope,
     ObservedAuthor,
     ObservedCategory,
     ObservedIdentifier,
@@ -31,18 +32,29 @@ from paper_insights.domain.analysis import (
     FullTextRequest,
 )
 from paper_insights.domain.corpus import (
+    AttachedSnapshotRef,
     AttachPreparedRun,
     BlobInspection,
     BlobWrite,
-    CreateCollection,
     CitationFormat,
     CitationResult,
     CitationWarning,
-    MetadataBlobRef,
+    CreateCollection,
+    IngestionFailureStage,
+    IngestionItemRef,
+    IngestionOutcome,
     IngestionRunRef,
+    IngestionSummary,
+    InterruptedRunCandidate,
+    InterruptedRunRepairOutcome,
+    InterruptedRunRepairResult,
+    MetadataBlobRef,
     PaperIdentity,
     PreparedSnapshotAttachment,
+    RecordIngestionFailure,
     RecordObservation,
+    RepairInterruptedRun,
+    RunCounters,
     SnapshotRecordAttachment,
     StoredBlobRef,
 )
@@ -58,12 +70,6 @@ from paper_insights.domain.federation import (
     NativeCorpusHit,
     SourceType,
 )
-from paper_insights.domain.identity import (
-    IdentityObservation,
-    IdentityObservationBatch,
-    IdentityQuery,
-    IdentityState,
-)
 from paper_insights.domain.identifiers import (
     AuthorId,
     PaperId,
@@ -76,9 +82,14 @@ from paper_insights.domain.identifiers import (
     VersionObservationId,
     WatchlistId,
 )
+from paper_insights.domain.identity import (
+    IdentityObservation,
+    IdentityObservationBatch,
+    IdentityQuery,
+    IdentityState,
+)
 from paper_insights.domain.monitoring import CreateWatchlist, FinalizeWatchlistRun, WatchlistSlug
 from paper_insights.domain.retrieval import CatalogRevision, CoverageStatus, PublishedIndex
-
 
 ID = UUID("01890f3e-3b12-7cc0-98d6-4f6f94748f5a")
 NOW = datetime(2026, 8, 29, tzinfo=UTC)
@@ -105,7 +116,13 @@ def observed() -> ObservedPaperVersion:
         normalized_sha256=Sha256("b" * 64),
         authors=(ObservedAuthor(raw_name="Ada Lovelace", affiliation_raw="Institute"),),
         categories=(ObservedCategory(value="cs.AI", is_primary=True),),
-        identifiers=(ObservedIdentifier(scheme="doi", canonical_value="10.1000/example"),),
+        identifiers=(
+            ObservedIdentifier(
+                scheme="doi",
+                canonical_value="10.1000/example",
+                scope=IdentifierScope.VERSION,
+            ),
+        ),
         comment="Comment",
         journal_reference="Journal 1",
         language="en",
@@ -217,10 +234,112 @@ def test_record_observation_rejects_ordinal_mismatch() -> None:
         )
 
 
+def test_ingestion_failure_is_closed_sanitized_and_source_backed() -> None:
+    failure = RecordIngestionFailure(
+        run_id=RunId(ID),
+        snapshot_id=SnapshotId(ID),
+        record_ordinal=0,
+        stage=IngestionFailureStage.CATALOG_WRITE,
+        code=ErrorCode.CATALOG_CONFLICT,
+        occurred_at=NOW,
+    )
+    assert failure.stage is IngestionFailureStage.CATALOG_WRITE
+    with pytest.raises(ValueError):
+        replace(failure, occurred_at=datetime(2026, 8, 29))
+    with pytest.raises(ValueError):
+        replace(failure, stage="catalog_write")  # type: ignore[arg-type]
+    with pytest.raises(ValueError):
+        replace(failure, code="catalog_conflict")  # type: ignore[arg-type]
+    with pytest.raises(ValueError):
+        replace(failure, code=ErrorCode.SOURCE_CONNECTION_FAILED)
+
+    interrupted = RecordIngestionFailure.from_code(
+        run_id=RunId(ID),
+        snapshot_id=SnapshotId(ID),
+        record_ordinal=1,
+        stage=IngestionFailureStage.RECOVERY,
+        code=ErrorCode.INTERRUPTED,
+        occurred_at=NOW,
+    )
+    assert interrupted.message == "record interrupted before completion"
+
+
+def test_ingestion_item_ref_identifies_snapshot_and_record() -> None:
+    result = IngestionItemRef(
+        run_id=RunId(ID),
+        snapshot_id=SnapshotId(ID),
+        record_ordinal=0,
+        outcome=IngestionOutcome.UNCHANGED,
+        paper_id=PaperId(ID),
+        paper_version_id=PaperVersionId(ID),
+        version_observation_id=VersionObservationId(ID),
+        created_paper=False,
+    )
+    assert result.snapshot_id == SnapshotId(ID)
+    with pytest.raises(ValueError):
+        replace(result, outcome="unchanged")  # type: ignore[arg-type]
+
+
+def test_ingestion_run_ref_returns_stable_ordered_snapshot_mapping() -> None:
+    snapshots = (AttachedSnapshotRef(page_ordinal=0, snapshot_id=SnapshotId(ID)),)
+    result = IngestionRunRef(run_id=RunId(ID), revision=1, snapshots=snapshots)
+
+    assert result.snapshot_id_for(0) == SnapshotId(ID)
+    with pytest.raises(ValueError):
+        replace(result, snapshots=[*snapshots])  # type: ignore[arg-type]
+
+
+def test_interrupted_run_repair_contract_is_closed_and_time_bounded() -> None:
+    candidate = InterruptedRunCandidate(
+        run_id=RunId(ID),
+        started_at=NOW - timedelta(hours=2),
+        selected_records=2,
+        recorded_items=1,
+    )
+    command = RepairInterruptedRun(
+        run_id=candidate.run_id,
+        cutoff=NOW - timedelta(hours=1),
+        occurred_at=NOW,
+    )
+    summary = IngestionSummary(
+        run_id=RunId(ID),
+        counters=RunCounters(selected_records=2, unchanged_records=1, failed_records=1),
+    )
+    mutated = InterruptedRunRepairResult(
+        run_id=RunId(ID),
+        outcome=InterruptedRunRepairOutcome.REPAIRED,
+        summary=summary,
+        revision=3,
+    )
+    no_op = InterruptedRunRepairResult(
+        run_id=RunId(ID),
+        outcome=InterruptedRunRepairOutcome.NOT_ELIGIBLE,
+        summary=None,
+        revision=3,
+    )
+
+    assert command.cutoff < command.occurred_at
+    assert candidate.missing_records == 1
+    assert mutated.summary is summary
+    assert no_op.summary is None
+    with pytest.raises(ValueError):
+        replace(candidate, recorded_items=3)
+    with pytest.raises(ValueError):
+        replace(command, cutoff=datetime(2026, 8, 29))
+    with pytest.raises(ValueError):
+        replace(command, occurred_at=command.cutoff - timedelta(seconds=1))
+    with pytest.raises(ValueError):
+        replace(mutated, summary=None)
+    with pytest.raises(ValueError):
+        replace(no_op, summary=summary)
+
+
 @pytest.mark.parametrize(
     "factory",
     [
-        lambda: DiscoveryIssue(code=ErrorCode.RECORD_INVALID, message=""),
+        lambda: DiscoveryIssue(code="record_invalid"),
+        lambda: DiscoveryIssue(code=ErrorCode.INTERRUPTED),
+        lambda: ObservedIdentifier("doi", "10.1000/example", "version"),
         lambda: BlobWrite(content=b"", media_type=""),
         lambda: StoredBlobRef(Sha256("a" * 64), -1, "text/plain", Path("/absolute")),
         lambda: FederatedSearchQuery(query="", limit_per_corpus=0),
