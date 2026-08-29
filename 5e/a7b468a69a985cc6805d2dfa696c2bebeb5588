@@ -1,0 +1,121 @@
+src/paper_insights/domain/acquisition.py
+  s_2f2b8a177ba283::t_605b7c7312a17b 11,42,148,190,227,261
+docs/specs/PORTS.md
+  s_2f2b8a177ba283::t_edb3f792cb51d1 7
+  s_2f2b8a177ba283::t_3bfa8616d44015 91,110
+  s_2f2b8a177ba283::t_1afb70acbccd8b 164
+src/paper_insights/domain/federation.py
+  s_2f2b8a177ba283::t_3d0972f557d8e4 11,39,100,116
+  s_2f2b8a177ba283::t_320bbeebc01f07 3,38,40-42,59-62,71-77,87-90,99,101-108,115,117-122,129-132
+tests/domain/test_boundary_dtos.py
+  s_2f2b8a177ba283::t_e322217a810327 5,40,269,281,334-337,340-343
+  s_2f2b8a177ba283::t_efb4e96fe4f6d8 282
+  s_2f2b8a177ba283::t_47da7de3281346 79
+  s_2f2b8a177ba283::t_4ff7a5229fe6e9 268,344-371
+  s_2f2b8a177ba283::t_7a0458fdcf188c 202,215,238
+  s_2f2b8a177ba283::t_3c95a30048eff1 240-243
+  s_2f2b8a177ba283::t_9ffcf504e91f57 3,29
+  s_2f2b8a177ba283::t_cc4487de099a56 6,13,15,17,22,35,37,42-43,80,118-121,123-125,127,130,132,134-135,137-143,145-172,176-196,208-214,216-219,233-237,239,244
+  s_2f2b8a177ba283::t_95f8d4bf3fd330 31,50-66,68,245,277-280,283-312
+  s_2f2b8a177ba283::t_cd35222603945e 77
+  s_2501bbbaa308a1::t_ae85f773f56298 313-314
+src/paper_insights/domain/corpus.py
+  s_2f2b8a177ba283::t_63a3ca6490490f 4,11-15,53-60,111-113,122-124,134-136,164-165,186,191-223,225-229,241-244,258-261,274-277,284-287,295-298,315-323,396-402,434,442-444
+  s_2f2b8a177ba283::t_af690ae75b3490 355-358
+  s_2f2b8a177ba283::t_bd86130c351fc5 435-441
+  s_2f2b8a177ba283::t_a0b8ff6650ad87 29,145-152,190,376,466
+  s_2f2b8a177ba283::t_cde407b3220257 411-417,463,471-479
+  s_95392a6b844626::t_3ba3c4700dfb7c 137,324,403,445
+src/paper_insights/domain/identity.py
+  s_2f2b8a177ba283::t_320bbeebc01f07 4,17-21,27-30,40-44,51,53-55,62-64,79,81-85,96,98,105-106,108-111
+  s_2f2b8a177ba283::t_19f8f2153bceed 8,52,78,107
+  s_2501bbbaa308a1::t_44feb449c146d9 65
+docs/specs/SEARCH-AND-MCP.md
+  s_2f2b8a177ba283::t_1afb70acbccd8b 121-129
+src/paper_insights/domain/validation.py
+  s_2f2b8a177ba283::t_067d2a78e150aa 1-7
+src/paper_insights/domain/analysis.py
+  s_2f2b8a177ba283::t_320bbeebc01f07 6,23-27,34,38-40,47-49,56-61,70-72,138-141,150-153,160-163,171,173-177,183-184,186-191
+  s_2f2b8a177ba283::t_0ad77cf972a0bd 3
+  s_2f2b8a177ba283::t_cde407b3220257 103-104
+  s_2f2b8a177ba283::t_8e3bd23790e9fe 12,89,128,172,185
+  s_2f2b8a177ba283::t_574a4fa836c265 8,35-37
+  s_d812a5cba40e21::t_f440d119b67940 73
+src/paper_insights/domain/monitoring.py
+  s_2f2b8a177ba283::t_2d30d653d74eac 5,76-77
+CHANGELOG.md
+  s_2f2b8a177ba283::t_3bfa8616d44015 30-31
+  s_2f2b8a177ba283::t_12f08bfd95874c 33
+  s_2f2b8a177ba283::t_1afb70acbccd8b 32
+  s_2f2b8a177ba283::t_edb3f792cb51d1 34
+tests/domain/test_contract_shapes.py
+  s_2f2b8a177ba283::t_e322217a810327 19,32-33,35,145-173
+  s_2f2b8a177ba283::t_7a8db266db98e6 275-283,290-295,302-305,309-311,313-318,328-334,338-340,342-347,349-352,354-359,363-365,371-392,397-400,418-424
+  s_2f2b8a177ba283::t_f83496b5ca7ec4 104,115-121,123-126,139-144
+  s_2f2b8a177ba283::t_4f55e12c52b350 8,208-226
+  s_2f2b8a177ba283::t_7764820e9e45d8 272-274,284-289,296-301,306-308,312,319-327,335-337,341,348,353,360-362,366-370,408-409
+  s_2f2b8a177ba283::t_921e08ee90239e 122,127-138
+  s_d812a5cba40e21::t_dae37b8349b896 174-175,227-228,425
+src/paper_insights/domain/retrieval.py
+  s_2f2b8a177ba283::t_5a52a831ca7177 19,100,275,306
+  s_2f2b8a177ba283::t_01082be27ed730 88-91,99,101-106,134,150-152,184,195,242-246,256-260,278-284,309-315
+  s_2f2b8a177ba283::t_cde407b3220257 166-168,222-226
+  s_787e22a0128d74::t_b722ab36d166aa 153,227
+tests/architecture/test_import_boundaries.py
+  s_2f2b8a177ba283::t_574a4fa836c265 9-15,22,29
+  s_2f2b8a177ba283::t_edb3f792cb51d1 28,111-115
+  s_2f2b8a177ba283::t_4ff7a5229fe6e9 174-175
+  s_2f2b8a177ba283::t_cde407b3220257 96-107
+  s_2f2b8a177ba283::t_59ca586b1dba38 176,205-214
+  s_2f2b8a177ba283::t_f83496b5ca7ec4 159-163,199-204,215-216
+  s_2f2b8a177ba283::t_e322217a810327 164-173
+  s_2f2b8a177ba283::t_b51bc5b9a5f5d7 40-71,77-79,93,95,108-109
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "5ea7b468a69a985cc6805d2dfa696c2bebeb5588",
+  "prompts": {},
+  "sessions": {
+    "s_2501bbbaa308a1": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e6fa1d98-840b-4eb4-9c0f-51e67cae6d48",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Florian BRUNIAUX <florian@bruniaux.com>"
+    },
+    "s_2f2b8a177ba283": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a04a7c-f938-7500-b20e-0faa6c4019c5",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Florian BRUNIAUX <florian@bruniaux.com>"
+    },
+    "s_787e22a0128d74": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a048f1-6c01-74b0-957c-5613dbb569d7",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "Florian BRUNIAUX <florian@bruniaux.com>"
+    },
+    "s_95392a6b844626": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a04821-7023-7112-aeb8-f4aa59348ce9",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Florian BRUNIAUX <florian@bruniaux.com>"
+    },
+    "s_d812a5cba40e21": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a033c4-cc98-74d2-adf5-63f175b8463b",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Florian BRUNIAUX <florian@bruniaux.com>"
+    }
+  }
+}
