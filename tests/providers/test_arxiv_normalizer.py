@@ -7,7 +7,6 @@ from pathlib import Path
 from paper_insights.adapters.providers.arxiv.normalizer import normalized_metadata_payload
 from paper_insights.adapters.providers.arxiv.parser import parse_arxiv_feed
 
-
 FIXTURES = Path(__file__).parents[1] / "fixtures" / "arxiv"
 
 

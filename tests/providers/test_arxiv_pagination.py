@@ -9,7 +9,6 @@ import httpx
 from paper_insights.adapters.providers.arxiv.client import ArxivClient, ArxivClientConfig
 from paper_insights.domain.acquisition import DiscoveryQuery
 
-
 FIXTURES = Path(__file__).parents[1] / "fixtures" / "arxiv"
 CAPTURE_IDS = iter(
     (
@@ -91,3 +90,54 @@ def test_cursor_and_query_fields_are_encoded_deterministically() -> None:
     assert "cat:cs.AI" in search_query
     assert 'au:"Alice Example"' in search_query
     assert "submittedDate:[202608010000 TO 202608312359]" in search_query
+
+
+def test_request_fingerprint_keeps_initial_query_across_a_redirect() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/query":
+            return httpx.Response(302, headers={"Location": "/api/final"}, request=request)
+        return httpx.Response(
+            200, content=(FIXTURES / "revision-v2.xml").read_bytes(), request=request
+        )
+
+    def discover(text: str) -> str:
+        client = ArxivClient(
+            http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+            config=ArxivClientConfig(page_size=1),
+            clock=lambda: datetime(2026, 8, 29, tzinfo=UTC),
+            new_capture_id=lambda: UUID("01890f3e-3b12-7cc0-98d6-4f6f94748f5a"),
+            sleep=lambda _delay: None,
+        )
+        return client.discover(DiscoveryQuery(text=text, limit=1)).pages[
+            0
+        ].request_fingerprint.value
+
+    assert discover("alpha") != discover("beta")
+
+
+def test_request_fingerprint_covers_every_redirect_hop() -> None:
+    def discover(*, with_intermediate_hop: bool) -> str:
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path == "/api/query":
+                target = "/api/intermediate" if with_intermediate_hop else "/api/final"
+                return httpx.Response(302, headers={"Location": target}, request=request)
+            if request.url.path == "/api/intermediate":
+                return httpx.Response(
+                    302, headers={"Location": "/api/final"}, request=request
+                )
+            return httpx.Response(
+                200, content=(FIXTURES / "revision-v2.xml").read_bytes(), request=request
+            )
+
+        client = ArxivClient(
+            http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+            config=ArxivClientConfig(page_size=1),
+            clock=lambda: datetime(2026, 8, 29, tzinfo=UTC),
+            new_capture_id=lambda: UUID("01890f3e-3b12-7cc0-98d6-4f6f94748f5a"),
+            sleep=lambda _delay: None,
+        )
+        return client.discover(DiscoveryQuery(text="same", limit=1)).pages[
+            0
+        ].request_fingerprint.value
+
+    assert discover(with_intermediate_hop=False) != discover(with_intermediate_hop=True)

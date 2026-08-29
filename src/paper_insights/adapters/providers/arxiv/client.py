@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import secrets
 import time
 from collections.abc import Callable
@@ -23,7 +24,6 @@ from paper_insights.domain.acquisition import (
 )
 from paper_insights.domain.errors import ErrorCode
 from paper_insights.domain.identifiers import Sha256, SourceId
-
 
 ARXIV_SOURCE = SourceId("arxiv")
 
@@ -74,7 +74,7 @@ class ArxivClientConfig:
 class _FetchedPage:
     payload: bytes
     media_type: str
-    request_url: str
+    request_trace: tuple[str, ...]
 
 
 class _RetryableStatus(Exception):
@@ -196,7 +196,16 @@ class ArxivClient:
                 str(next_start) if has_more and len(observations) < query.limit else None
             )
             request_fingerprint = Sha256(
-                hashlib.sha256(fetched.request_url.encode("utf-8")).hexdigest()
+                hashlib.sha256(
+                    json.dumps(
+                        {
+                            "request_trace": list(fetched.request_trace),
+                            "schema_version": "arxiv-request-fingerprint-v1",
+                        },
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ).encode("utf-8")
+                ).hexdigest()
             )
             pages.append(
                 DiscoveryPage(
@@ -239,6 +248,11 @@ class ArxivClient:
                         ErrorCode.SOURCE_TIMEOUT, "arXiv request timed out"
                     ) from exc
                 self._sleep(self._retry_delay(None, attempt))
+            except httpx.TransportError as exc:
+                raise ArxivProviderError(
+                    ErrorCode.SOURCE_CONNECTION_FAILED,
+                    "arXiv transport failed",
+                ) from exc
             except _RetryableStatus as exc:
                 last_status = exc.status_code
                 if attempt + 1 == self._config.max_attempts:
@@ -257,6 +271,7 @@ class ArxivClient:
     def _fetch_with_redirects(self, params: dict[str, str]) -> _FetchedPage:
         url = self._config.base_url
         request_params: dict[str, str] | None = params
+        request_trace: list[str] = []
         for redirect_count in range(self._config.max_redirects + 1):
             try:
                 _validate_url(url, self._allowed_hosts)
@@ -272,6 +287,7 @@ class ArxivClient:
                 timeout=self._config.timeout_seconds,
                 follow_redirects=False,
             ) as response:
+                request_trace.append(str(response.request.url))
                 if response.status_code in {301, 302, 303, 307, 308}:
                     location = response.headers.get("Location")
                     if location is None or redirect_count == self._config.max_redirects:
@@ -308,7 +324,7 @@ class ArxivClient:
                 return _FetchedPage(
                     payload=b"".join(chunks),
                     media_type=media_type.split(";", 1)[0].strip(),
-                    request_url=str(response.request.url),
+                    request_trace=tuple(request_trace),
                 )
         raise ArxivProviderError(
             ErrorCode.SOURCE_REDIRECT_REFUSED, "arXiv redirect limit was exceeded"

@@ -10,7 +10,6 @@ from paper_insights.domain.acquisition import DiscoveryIssue, DiscoveryRecord, R
 from paper_insights.domain.errors import ErrorCode
 from paper_insights.domain.identifiers import Sha256
 
-
 OPENSEARCH = "http://a9.com/-/spec/opensearch/1.1/"
 
 
@@ -28,6 +27,14 @@ def _entry_slices(payload: bytes) -> tuple[bytes, ...]:
     starts: list[int] = []
     entries: list[bytes] = []
 
+    def reject_doctype(
+        _name: str,
+        _system_id: str | None,
+        _public_id: str | None,
+        _has_internal_subset: int,
+    ) -> None:
+        raise ValueError("arXiv XML declarations are not allowed")
+
     def start(name: str, _attributes: dict[str, str]) -> None:
         if name.rsplit(":", 1)[-1] == "entry":
             starts.append(parser.CurrentByteIndex)
@@ -37,13 +44,21 @@ def _entry_slices(payload: bytes) -> tuple[bytes, ...]:
             return
         if not starts:
             raise ValueError("unbalanced arXiv entry")
-        closing = payload.find(b">", parser.CurrentByteIndex)
+        if payload.startswith(b"\xff\xfe") or payload.startswith(b"<\x00?\x00"):
+            delimiter = b">\x00"
+        elif payload.startswith(b"\xfe\xff") or payload.startswith(b"\x00<\x00?"):
+            delimiter = b"\x00>"
+        else:
+            delimiter = b">"
+        closing = payload.find(delimiter, parser.CurrentByteIndex)
         if closing < 0:
             raise ValueError("unterminated arXiv entry")
-        entries.append(payload[starts.pop() : closing + 1])
+        entries.append(payload[starts.pop() : closing + len(delimiter)])
 
     parser.StartElementHandler = start
     parser.EndElementHandler = end
+    parser.StartDoctypeDeclHandler = reject_doctype
+    parser.SetParamEntityParsing(expat.XML_PARAM_ENTITY_PARSING_NEVER)
     try:
         parser.Parse(payload, True)
     except expat.ExpatError as exc:
@@ -72,9 +87,12 @@ def parse_arxiv_feed(payload: bytes, *, page_ordinal: int) -> ParsedArxivFeed:
         raise ValueError("arXiv XML declarations are not allowed")
     raw_entries = _entry_slices(payload)
     try:
-        root = ElementTree.fromstring(payload)
+        # The Expat preflight rejects every DTD before this tree-building pass.
+        root = ElementTree.fromstring(payload)  # noqa: S314
     except ElementTree.ParseError as exc:
         raise ValueError("invalid arXiv Atom XML") from exc
+    if root.tag != f"{{{ATOM}}}feed":
+        raise ValueError("arXiv XML requires an Atom feed root")
     entries = tuple(root.findall(f"{{{ATOM}}}entry"))
     if len(entries) != len(raw_entries):
         raise ValueError("arXiv entry provenance is incomplete")
@@ -108,7 +126,6 @@ def parse_arxiv_feed(payload: bytes, *, page_ordinal: int) -> ParsedArxivFeed:
             issues.append(
                 DiscoveryIssue(
                     code=ErrorCode.RECORD_INVALID,
-                    message="arXiv entry is invalid",
                     page_ordinal=page_ordinal,
                     record_ordinal=record_ordinal,
                 )

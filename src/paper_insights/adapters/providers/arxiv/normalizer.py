@@ -7,13 +7,13 @@ from datetime import UTC, datetime
 from xml.etree import ElementTree
 
 from paper_insights.domain.acquisition import (
+    IdentifierScope,
     ObservedAuthor,
     ObservedCategory,
     ObservedIdentifier,
     ObservedPaperVersion,
 )
-from paper_insights.domain.identifiers import Sha256, SourceId
-
+from paper_insights.domain.identifiers import PaperSelector, Sha256, SourceId
 
 ATOM = "http://www.w3.org/2005/Atom"
 ARXIV = "http://arxiv.org/schemas/atom"
@@ -131,12 +131,22 @@ def normalize_arxiv_entry(
         if (term := category.get("term"))
     )
 
-    identifiers: list[ObservedIdentifier] = [
-        ObservedIdentifier(scheme="arxiv", canonical_value=paper_id)
-    ]
+    identifiers: list[ObservedIdentifier] = []
     doi = _collapsed_text(entry, f"{{{ARXIV}}}doi")
     if doi is not None:
-        identifiers.append(ObservedIdentifier(scheme="doi", canonical_value=doi.lower()))
+        canonical_doi = doi.lower()
+        try:
+            PaperSelector.by_doi(canonical_doi)
+        except ValueError:
+            pass
+        else:
+            identifiers.append(
+                ObservedIdentifier(
+                    scheme="doi",
+                    canonical_value=canonical_doi,
+                    scope=IdentifierScope.VERSION,
+                )
+            )
 
     source_url = None
     for link in entry.findall(f"{{{ATOM}}}link"):

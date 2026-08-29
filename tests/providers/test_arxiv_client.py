@@ -15,7 +15,6 @@ from paper_insights.adapters.providers.arxiv.client import (
 from paper_insights.domain.acquisition import DiscoveryQuery
 from paper_insights.domain.errors import ErrorCode
 
-
 FIXTURES = Path(__file__).parents[1] / "fixtures" / "arxiv"
 CAPTURE_ID = UUID("01890f3e-3b12-7cc0-98d6-4f6f94748f5a")
 
@@ -146,6 +145,29 @@ def test_timeout_retries_are_bounded() -> None:
     assert calls == 3
     assert sleeps == [0.25, 0.5]
     assert raised.value.code is ErrorCode.SOURCE_TIMEOUT
+
+
+@pytest.mark.parametrize(
+    "error_type",
+    (httpx.ConnectError, httpx.ReadError, httpx.RemoteProtocolError),
+)
+def test_non_timeout_transport_errors_use_the_closed_connection_code(
+    error_type: type[httpx.TransportError],
+) -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        raise error_type("fixture transport failure", request=request)
+
+    client = make_client(httpx.MockTransport(handler))
+
+    with pytest.raises(ArxivProviderError) as raised:
+        client.discover(DiscoveryQuery(text="transport", limit=1))
+
+    assert calls == 1
+    assert raised.value.code is ErrorCode.SOURCE_CONNECTION_FAILED
 
 
 @pytest.mark.parametrize("status_code", (400, 401, 403, 404, 422))
