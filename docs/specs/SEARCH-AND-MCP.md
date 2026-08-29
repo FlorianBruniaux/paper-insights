@@ -118,6 +118,15 @@ Les formats cibles sont `bibtex`, `markdown` et `csl-json`. Ils utilisent une ob
 - source, identifiant source, snapshot, ordinal et `retrieved_at`;
 - couverture et avertissements fermés.
 
+Le vocabulaire `CitationWarning v1` est fermé et trié par valeur:
+
+- `literal-author`: le nom a été observé sous forme littérale sans séparation fiable;
+- `missing-required-field`: le format demandé omet un champ requis faute d'observation;
+- `partial-date`: seule une partie de la date attendue est observée;
+- `partial-provenance`: la citation est rendue, mais sa couverture de provenance est partielle.
+
+Les avertissements et les champs absents sont uniques, non vides et triés. Une valeur hors vocabulaire fait échouer la construction du résultat.
+
 Règles communes:
 
 - ordre des auteurs préservé;

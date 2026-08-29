@@ -16,6 +16,7 @@ from paper_insights.domain.identifiers import (
     SourceId,
     VersionObservationId,
 )
+from paper_insights.domain.validation import require_tuples
 
 
 @dataclass(frozen=True, slots=True, order=True)
@@ -84,12 +85,24 @@ class IndexDocument:
     abstract: str | None
     metadata_artifact_sha256: Sha256
 
+    def __post_init__(self) -> None:
+        if not self.title.strip():
+            raise ValueError("index document title is required")
+
 
 @dataclass(frozen=True, slots=True)
 class IndexBuildRequest:
     documents: tuple[IndexDocument, ...]
     catalog_revision: CatalogRevision
     chunk_schema_version: str
+
+    def __post_init__(self) -> None:
+        require_tuples(self, "documents")
+        if not self.chunk_schema_version:
+            raise ValueError("chunk schema version is required")
+        identities = tuple(document.paper_version_id for document in self.documents)
+        if len(set(identities)) != len(identities):
+            raise ValueError("index documents cannot duplicate paper versions")
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,7 +131,7 @@ class IndexCandidate:
     receipt: IndexReceipt
 
     def __post_init__(self) -> None:
-        if self.path.is_absolute() or self.generation < 0:
+        if not self.path.is_absolute() or self.generation < 0:
             raise ValueError("index candidate path or generation is invalid")
         if (
             self.receipt.catalog_revision != self.catalog_revision
@@ -134,6 +147,10 @@ class PublishedIndex:
     catalog_revision: CatalogRevision
     generation: int
 
+    def __post_init__(self) -> None:
+        if not self.path.is_absolute() or self.generation < 0:
+            raise ValueError("published index path or generation is invalid")
+
 
 @dataclass(frozen=True, slots=True)
 class SearchFilters:
@@ -146,6 +163,9 @@ class SearchFilters:
     collection: str | None = None
 
     def __post_init__(self) -> None:
+        for value in (self.category, self.author, self.language, self.collection):
+            if value is not None and not value.strip():
+                raise ValueError("search filter values cannot be blank")
         for value in (self.date_from, self.date_to):
             if value is not None and value.utcoffset() != timedelta(0):
                 raise ValueError("search filter dates must use UTC")
@@ -161,7 +181,7 @@ class PaperSearchQuery:
     limit: int = 10
 
     def __post_init__(self) -> None:
-        if not 1 <= len(self.query) <= 500 or not 1 <= self.limit <= 50:
+        if not 1 <= len(self.query) <= 500 or not self.query.strip() or not 1 <= self.limit <= 50:
             raise ValueError("invalid paper search query")
 
 
@@ -172,7 +192,7 @@ class PassageSearchQuery:
     limit: int = 10
 
     def __post_init__(self) -> None:
-        if not 1 <= len(self.query) <= 500 or not 1 <= self.limit <= 50:
+        if not 1 <= len(self.query) <= 500 or not self.query.strip() or not 1 <= self.limit <= 50:
             raise ValueError("invalid passage search query")
 
 
@@ -199,6 +219,12 @@ class PassageView:
     version_observation_id: VersionObservationId
     text: str
 
+    def __post_init__(self) -> None:
+        if self.passage_id != passage_id(self.identity):
+            raise ValueError("passage ID differs from its deterministic identity")
+        if self.text != self.identity.normalized_text:
+            raise ValueError("passage text differs from its deterministic identity")
+
 
 @dataclass(frozen=True, slots=True)
 class PassageSearchHit:
@@ -213,7 +239,11 @@ class PassageSearchHit:
 
 
 def _validate_result(
-    hits: tuple[object, ...], returned: int, available: int | None, truncated: bool
+    hits: tuple[object, ...],
+    returned: int,
+    available: int | None,
+    truncated: bool,
+    applied_limit: int,
 ) -> None:
     if returned != len(hits):
         raise ValueError("returned must equal the number of hits")
@@ -223,6 +253,11 @@ def _validate_result(
         raise ValueError("truncated results require undisclosed available hits")
     if not truncated and available is not None and available > returned:
         raise ValueError("unreturned available hits require truncation")
+    if returned > applied_limit:
+        raise ValueError("returned hits exceed the applied limit")
+    ranks = tuple(getattr(hit, "rank") for hit in hits)
+    if ranks != tuple(range(1, returned + 1)):
+        raise ValueError("result ranks must be positive, unique, and ordered")
 
 
 @dataclass(frozen=True, slots=True)
@@ -237,9 +272,16 @@ class PaperSearchResult:
     applied_limit: int
 
     def __post_init__(self) -> None:
-        _validate_result(self.hits, self.returned, self.available, self.truncated)
+        require_tuples(self, "hits")
         if not 1 <= self.applied_limit <= 50:
             raise ValueError("invalid applied paper-search limit")
+        _validate_result(
+            self.hits,
+            self.returned,
+            self.available,
+            self.truncated,
+            self.applied_limit,
+        )
         if (
             self.coverage is CoverageStatus.COMPLETE
             and self.catalog_revision != self.index_revision
@@ -261,9 +303,16 @@ class PassageSearchResult:
     applied_limit: int
 
     def __post_init__(self) -> None:
-        _validate_result(self.hits, self.returned, self.available, self.truncated)
+        require_tuples(self, "hits")
         if not 1 <= self.applied_limit <= 50:
             raise ValueError("invalid applied passage-search limit")
+        _validate_result(
+            self.hits,
+            self.returned,
+            self.available,
+            self.truncated,
+            self.applied_limit,
+        )
         if (
             self.coverage is CoverageStatus.COMPLETE
             and self.catalog_revision != self.index_revision

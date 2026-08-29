@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import Enum
 from pathlib import Path
 from uuid import UUID
 
-from paper_insights.domain.acquisition import ObservedPaperVersion, RecordLocator
+from paper_insights.domain.acquisition import (
+    ObservedPaperVersion,
+    PreparedDiscovery,
+    RecordLocator,
+)
 from paper_insights.domain.identifiers import (
     ArtifactId,
     CollectionId,
@@ -21,6 +26,7 @@ from paper_insights.domain.identifiers import (
     VersionObservationId,
 )
 from paper_insights.domain.retrieval import CoverageStatus
+from paper_insights.domain.validation import require_tuples
 
 
 class IngestionStatus(str, Enum):
@@ -42,6 +48,14 @@ class ArtifactKind(str, Enum):
     PDF = "pdf"
     TEXT = "text"
     ANALYSIS = "analysis"
+
+
+_COLLECTION_SLUG = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+
+
+def _require_utc(value: datetime, field: str) -> None:
+    if value.tzinfo is None or value.utcoffset() != timedelta(0):
+        raise ValueError(f"{field} must use UTC")
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,6 +108,9 @@ class PaperIdentity:
     paper_id: PaperId
     created_at: datetime
 
+    def __post_init__(self) -> None:
+        _require_utc(self.created_at, "paper creation timestamp")
+
 
 @dataclass(frozen=True, slots=True)
 class VersionObservation:
@@ -101,6 +118,9 @@ class VersionObservation:
     paper_version_id: PaperVersionId
     observed: ObservedPaperVersion
     observed_at: datetime
+
+    def __post_init__(self) -> None:
+        _require_utc(self.observed_at, "observation timestamp")
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,6 +131,10 @@ class ArtifactRef:
     sha256: Sha256
     kind: ArtifactKind
 
+    def __post_init__(self) -> None:
+        if self.kind is ArtifactKind.METADATA and self.version_observation_id is None:
+            raise ValueError("metadata artifacts require an observation")
+
 
 @dataclass(frozen=True, slots=True)
 class PaperView:
@@ -118,10 +142,17 @@ class PaperView:
     observations: tuple[VersionObservation, ...]
     artifacts: tuple[ArtifactRef, ...]
 
+    def __post_init__(self) -> None:
+        require_tuples(self, "observations", "artifacts")
+        if not self.observations:
+            raise ValueError("paper view requires at least one observation")
+        versions = {item.paper_version_id for item in self.observations}
+        if any(artifact.paper_version_id not in versions for artifact in self.artifacts):
+            raise ValueError("paper artifact has no matching observation")
+
 
 @dataclass(frozen=True, slots=True)
 class RecordObservation:
-    run_id: RunId
     snapshot_id: SnapshotId
     record_ordinal: int
     observed: ObservedPaperVersion
@@ -130,6 +161,8 @@ class RecordObservation:
     def __post_init__(self) -> None:
         if self.record_ordinal < 0:
             raise ValueError("record ordinal cannot be negative")
+        if self.record_ordinal != self.observed.record_ordinal:
+            raise ValueError("record ordinal differs from the observation")
         if self.metadata_blob.normalized_sha256 != self.observed.normalized_sha256:
             raise ValueError("metadata blob does not match normalized observation")
 
@@ -150,42 +183,50 @@ class RecordObservationResult:
 @dataclass(frozen=True, slots=True)
 class AttachPreparedRun:
     run_id: RunId
-    source_id: SourceId
-    prepared_digest: Sha256
-    query_json: str
+    prepared: PreparedDiscovery
     pages: tuple[PreparedSnapshotAttachment, ...]
-    selected_locators: tuple[RecordLocator, ...]
 
     def __post_init__(self) -> None:
-        try:
-            query = json.loads(self.query_json)
-        except json.JSONDecodeError as exc:
-            raise ValueError("query_json must be valid JSON") from exc
-        if not isinstance(query, dict) or not query.get("schema_version"):
-            raise ValueError("query_json requires a schema version")
-        canonical_query = json.dumps(
-            query, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-        )
-        if canonical_query != self.query_json:
-            raise ValueError("query_json must use canonical JSON")
-        if tuple(page.page_ordinal for page in self.pages) != tuple(range(len(self.pages))):
-            raise ValueError("prepared pages must be contiguous and ordered")
-        if len({page.capture_id for page in self.pages}) != len(self.pages):
-            raise ValueError("prepared page capture IDs must be unique")
-        available = {
-            record.locator for page in self.pages for record in page.records
+        require_tuples(self, "pages")
+        batch_pages = self.prepared.batch.pages
+        if len(self.pages) != len(batch_pages):
+            raise ValueError("attached pages differ from the prepared manifest")
+        for ordinal, (attached, source) in enumerate(zip(self.pages, batch_pages, strict=True)):
+            expected_records = tuple(
+                SnapshotRecordAttachment(record.locator) for record in source.records
+            )
+            if (
+                attached.page_ordinal != ordinal
+                or attached.capture_id != source.capture_id
+                or attached.blob.sha256 != source.payload_sha256
+                or attached.blob.size_bytes != len(source.raw_payload)
+                or attached.blob.media_type != source.media_type
+                or attached.request_fingerprint != source.request_fingerprint
+                or attached.retrieved_at != source.retrieved_at
+                or attached.next_cursor != source.next_cursor
+                or attached.records != expected_records
+            ):
+                raise ValueError("attached page differs from the prepared manifest")
+
+    @property
+    def source_id(self) -> SourceId:
+        return self.prepared.batch.source_id
+
+    @property
+    def prepared_digest(self) -> Sha256:
+        return self.prepared.digest
+
+    @property
+    def query_json(self) -> str:
+        payload = {
+            "query": self.prepared.batch.query.canonical_data(),
+            "schema_version": "discovery-query-v1",
         }
-        if len(set(self.selected_locators)) != len(self.selected_locators):
-            raise ValueError("selected locators cannot contain duplicates")
-        if any(locator not in available for locator in self.selected_locators):
-            raise ValueError("selected locator is missing from snapshot attachments")
-        ordered = tuple(
-            record.locator for page in self.pages for record in page.records
-        )
-        positions = {locator: index for index, locator in enumerate(ordered)}
-        selected_positions = tuple(positions[item] for item in self.selected_locators)
-        if selected_positions != tuple(sorted(selected_positions)):
-            raise ValueError("selected locators must preserve snapshot order")
+        return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+    @property
+    def selected_locators(self) -> tuple[RecordLocator, ...]:
+        return self.prepared.preview.selected_locators
 
     @property
     def selected_records(self) -> int:
@@ -196,6 +237,10 @@ class AttachPreparedRun:
 class IngestionRunRef:
     run_id: RunId
     revision: int
+
+    def __post_init__(self) -> None:
+        if self.revision < 0:
+            raise ValueError("catalog revision cannot be negative")
 
 
 @dataclass(frozen=True, slots=True)
@@ -210,6 +255,10 @@ class IngestionItemRef:
     record_ordinal: int
     outcome: IngestionOutcome
 
+    def __post_init__(self) -> None:
+        if self.record_ordinal < 0:
+            raise ValueError("record ordinal cannot be negative")
+
 
 @dataclass(frozen=True, slots=True)
 class IngestionSummary:
@@ -222,11 +271,19 @@ class CreateCollection:
     slug: str
     title: str
 
+    def __post_init__(self) -> None:
+        if not _COLLECTION_SLUG.fullmatch(self.slug) or not self.title.strip():
+            raise ValueError("collection slug and title are required")
+
 
 @dataclass(frozen=True, slots=True)
 class RenameCollection:
     collection_id: CollectionId
     title: str
+
+    def __post_init__(self) -> None:
+        if not self.title.strip():
+            raise ValueError("collection title is required")
 
 
 @dataclass(frozen=True, slots=True)
@@ -234,6 +291,10 @@ class AddCollectionPaper:
     collection_id: CollectionId
     selector: PaperSelector
     note: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.note is not None and not self.note.strip():
+            raise ValueError("collection note cannot be blank")
 
 
 @dataclass(frozen=True, slots=True)
@@ -250,6 +311,16 @@ class CollectionView:
     paper_count: int
     created_at: datetime
     updated_at: datetime
+
+    def __post_init__(self) -> None:
+        if not _COLLECTION_SLUG.fullmatch(self.slug) or not self.title.strip():
+            raise ValueError("collection slug and title are required")
+        if self.paper_count < 0:
+            raise ValueError("collection paper count cannot be negative")
+        _require_utc(self.created_at, "collection creation timestamp")
+        _require_utc(self.updated_at, "collection update timestamp")
+        if self.updated_at < self.created_at:
+            raise ValueError("collection update precedes creation")
 
 
 @dataclass(frozen=True, slots=True)
@@ -281,6 +352,10 @@ class MetadataBlobRef:
     blob: StoredBlobRef
     normalized_sha256: Sha256
 
+    def __post_init__(self) -> None:
+        if self.blob.sha256 != self.normalized_sha256:
+            raise ValueError("metadata blob differs from its normalized digest")
+
 
 @dataclass(frozen=True, slots=True)
 class SnapshotRecordAttachment:
@@ -298,6 +373,7 @@ class PreparedSnapshotAttachment:
     records: tuple[SnapshotRecordAttachment, ...]
 
     def __post_init__(self) -> None:
+        require_tuples(self, "records")
         if self.page_ordinal < 0 or self.capture_id.version != 7:
             raise ValueError("invalid prepared page identity")
         if self.retrieved_at.tzinfo is None or self.retrieved_at.utcoffset() != timedelta(0):
@@ -317,11 +393,26 @@ class BlobInspection:
     sha256: Sha256
     size_bytes: int | None
 
+    def __post_init__(self) -> None:
+        if self.size_bytes is not None and self.size_bytes < 0:
+            raise ValueError("blob size cannot be negative")
+        if not self.exists and (self.valid or self.size_bytes is not None):
+            raise ValueError("missing blob cannot be valid or have a size")
+        if self.valid and not self.exists:
+            raise ValueError("valid blob must exist")
+
 
 class CitationFormat(str, Enum):
     BIBTEX = "bibtex"
     MARKDOWN = "markdown"
     CSL_JSON = "csl-json"
+
+
+class CitationWarning(str, Enum):
+    LITERAL_AUTHOR = "literal-author"
+    MISSING_REQUIRED_FIELD = "missing-required-field"
+    PARTIAL_DATE = "partial-date"
+    PARTIAL_PROVENANCE = "partial-provenance"
 
 
 @dataclass(frozen=True, slots=True)
@@ -340,6 +431,18 @@ class CitationInput:
     record_ordinal: int
     retrieved_at: datetime
 
+    def __post_init__(self) -> None:
+        observed = self.observation.observed
+        if (
+            observed.source_id != self.source_id
+            or observed.source_item_id != self.source_item_id
+            or observed.record_ordinal != self.record_ordinal
+        ):
+            raise ValueError("citation provenance is invalid")
+        if not self.source_item_id or self.record_ordinal < 0:
+            raise ValueError("citation provenance is invalid")
+        _require_utc(self.retrieved_at, "citation retrieval timestamp")
+
 
 @dataclass(frozen=True, slots=True)
 class CitationResult:
@@ -357,12 +460,22 @@ class CitationResult:
     record_ordinal: int
     retrieved_at: datetime
     coverage: CoverageStatus
-    warnings: tuple[str, ...]
+    warnings: tuple[CitationWarning, ...]
 
     def __post_init__(self) -> None:
+        require_tuples(self, "missing_fields", "warnings")
         if self.schema_version != "citation-v1":
             raise ValueError("unsupported citation schema")
         if not self.media_type or not self.source_item_id or self.record_ordinal < 0:
             raise ValueError("citation content or provenance is invalid")
+        if self.missing_fields != tuple(sorted(set(self.missing_fields))):
+            raise ValueError("missing citation fields must be sorted and unique")
+        if any(not field.strip() for field in self.missing_fields):
+            raise ValueError("missing citation fields cannot be blank")
+        if any(not isinstance(warning, CitationWarning) for warning in self.warnings):
+            raise ValueError("unsupported citation warning")
+        warning_values = tuple(warning.value for warning in self.warnings)
+        if warning_values != tuple(sorted(set(warning_values))):
+            raise ValueError("citation warnings must be sorted and unique")
         if self.retrieved_at.tzinfo is None or self.retrieved_at.utcoffset() != timedelta(0):
             raise ValueError("citation retrieval timestamp must use UTC")

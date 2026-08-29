@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from paper_insights.domain.acquisition import DiscoveryQuery
 from paper_insights.domain.corpus import IngestionSummary
@@ -73,8 +73,8 @@ class FinalizeWatchlistRun:
     def __post_init__(self) -> None:
         if self.expected_state_version < 0:
             raise ValueError("watchlist state version cannot be negative")
-        if self.completed_at.tzinfo is None or self.completed_at.utcoffset() is None:
-            raise ValueError("watchlist completion timestamp must be aware")
+        if self.completed_at.tzinfo is None or self.completed_at.utcoffset() != timedelta(0):
+            raise ValueError("watchlist completion timestamp must use UTC")
 
 
 @dataclass(frozen=True, slots=True)

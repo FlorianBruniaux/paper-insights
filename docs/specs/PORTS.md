@@ -4,7 +4,7 @@
 
 Ce document fige les noms, directions et signatures publiques de Gate 0. Les modules Python de WP-01 doivent les exprimer avec `Protocol`, des dataclasses immuables et des types du domaine. Un adapter peut ajouter des méthodes privées, mais ne modifie pas ce contrat sans décision de l'intégrateur et mise à jour des specs.
 
-Tous les ports sont synchrones. Aucun type SQLAlchemy, objet HTTP, chemin implicite, modèle Pydantic ou `Any` ne traverse la frontière. Les iterables retournés sont matérialisés en tuples avant la fermeture du contexte qui les possède.
+Tous les ports sont synchrones. Aucun import d'infrastructure, notamment SQLAlchemy, Alembic, client HTTP, Typer ou MCP, n'est autorisé dans `domain` ou `application`. Pydantic est interdit dans `domain` et dans toute la couche `application`, à l'exception réservée du futur fichier `application/analysis/schemas.py` qui validera la frontière LLM prévue par WP-40. Cette exception ne rend pas ce module disponible à Gate 0. Aucun modèle Pydantic, type de framework, chemin implicite ou `Any` ne traverse un port. Les iterables retournés sont matérialisés en tuples avant la fermeture du contexte qui les possède. Un DTO rejette aussi toute liste, map ou collection mutable fournie à un champ déclaré comme tuple afin que `frozen=True` garantisse une immutabilité réelle.
 
 ## Plateforme
 
@@ -88,7 +88,7 @@ class CatalogRevisionLease(Protocol):
     def __exit__(self, exc_type: type[BaseException] | None, exc: BaseException | None, traceback: TracebackType | None) -> bool: ...
 ```
 
-Le factory ouvre une transaction d'écriture courte. `AttachPreparedRun` transporte toutes les pages préparées, références de blobs, captures et records ordonnés afin que `attach_prepared_run` puisse les attacher avec la run dans une transaction unique. `RecordObservation` transporte le blob metadata préparé, pas un `ArtifactRef` qui dépendrait d'une version encore à créer. `commit` vérifie les invariants puis incrémente au plus une fois la révision si une mutation visible existe. `CatalogSnapshot` est une lecture cohérente et fermée. `hold_if_current` prend la garde d'écriture avant la comparaison et la conserve jusqu'à la sortie du contexte.
+Le factory ouvre une transaction d'écriture courte. `AttachPreparedRun` contient le `PreparedDiscovery` validé et toutes les pages préparées avec leurs références de blobs, captures et records ordonnés. Sa construction vérifie chaque page et dérive le digest, la requête canonique `discovery-query-v1`, la source et la sélection du manifeste, sans accepter une seconde copie libre de ces valeurs. `attach_prepared_run` peut ainsi les attacher avec la run dans une transaction unique. `RecordObservation` transporte le blob metadata préparé, pas un `ArtifactRef` qui dépendrait d'une version encore à créer. Le `run_id` appartient à `RecordIngestionItem` et n'est pas dupliqué dans `RecordObservation`. `commit` vérifie les invariants puis incrémente au plus une fois la révision si une mutation visible existe. `CatalogSnapshot` est une lecture cohérente et fermée. `hold_if_current` prend la garde d'écriture avant la comparaison et la conserve jusqu'à la sortie du contexte.
 
 ## Recherche, collections et citations
 
@@ -107,7 +107,7 @@ class CitationRenderer(Protocol):
     def render(self, citation: CitationInput, format: CitationFormat) -> CitationResult: ...
 ```
 
-`IndexCandidate` contient le chemin explicite, la révision catalogue, la génération et le reçu `index_meta` attendu. `publish` accepte uniquement une lease courante. Les lectures rendent couverture, révisions et troncature dans leurs DTO. `CitationRenderer` ne reçoit qu'une observation exacte avec sa provenance.
+`IndexCandidate` contient un chemin absolu explicite produit par l'adapter, la révision catalogue, la génération et le reçu `index_meta` attendu. `PublishedIndex` contient lui aussi un chemin absolu. `publish` accepte uniquement une lease courante. Les lectures rendent couverture, révisions et troncature dans leurs DTO. Les rangs sont positifs, uniques et ordonnés; `returned` ne dépasse jamais la limite appliquée. `CitationRenderer` ne reçoit qu'une observation exacte avec sa provenance.
 
 Les mutations de collections utilisent `CollectionRepository` dans un `CatalogUnitOfWork`; aucun port de mutation n'est injecté dans MCP.
 
@@ -161,7 +161,7 @@ class AnalysisUnitOfWork(Protocol):
     def rollback(self) -> None: ...
 ```
 
-`AnalysisCacheKey` contient version du papier, SHA-256 de l'artefact, IDs ordonnés des passages, version de chunk, version et empreinte du prompt, provider, modèle, paramètres et version du schéma de résultat. `publish_complete` vérifie les preuves avant de remplacer une entrée de cache.
+`AnalysisCacheKey` contient version du papier, SHA-256 de l'artefact, IDs ordonnés des passages, version de chunk, version et empreinte du prompt, provider, modèle, objet JSON canonique de paramètres et version du schéma de résultat. `FullTextRequest` exige une URL HTTPS; la politique de l'adapter ferme ensuite les hôtes et les redirections autorisés. `publish_complete` vérifie les preuves avant de remplacer une entrée de cache.
 
 ## Identité
 

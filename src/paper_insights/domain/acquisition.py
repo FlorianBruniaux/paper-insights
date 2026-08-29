@@ -8,6 +8,7 @@ from uuid import UUID
 
 from paper_insights.domain.errors import ErrorCode
 from paper_insights.domain.identifiers import Sha256, SourceId
+from paper_insights.domain.validation import require_tuples
 
 
 PREVIEW_SCHEMA_VERSION = "discovery-preview-v1"
@@ -38,6 +39,7 @@ class DiscoveryQuery:
     cursor: str | None = None
 
     def __post_init__(self) -> None:
+        require_tuples(self, "categories", "authors", "identifiers")
         if not any((self.text, self.categories, self.authors, self.identifiers)):
             raise ValueError("discovery query requires at least one selector")
         if not 1 <= self.limit <= 100:
@@ -143,6 +145,7 @@ class ObservedPaperVersion:
     announced_at: datetime | None = None
 
     def __post_init__(self) -> None:
+        require_tuples(self, "authors", "categories", "identifiers")
         if not self.source_item_id or not self.source_version_key or not self.title:
             raise ValueError("observed paper version requires source identity and title")
         if self.page_ordinal < 0 or self.record_ordinal < 0:
@@ -184,6 +187,7 @@ class DiscoveryPage:
     next_cursor: str | None
 
     def __post_init__(self) -> None:
+        require_tuples(self, "records")
         if self.capture_id.version != 7:
             raise ValueError("capture ID must be UUIDv7")
         if not self.media_type:
@@ -220,6 +224,7 @@ class DiscoveryBatch:
     issues: tuple[DiscoveryIssue, ...]
 
     def __post_init__(self) -> None:
+        require_tuples(self, "pages", "records", "issues")
         flattened = tuple(
             record.observation
             for page in self.pages
@@ -253,6 +258,7 @@ class DiscoveryPreview:
     digest: Sha256
 
     def __post_init__(self) -> None:
+        require_tuples(self, "selected_locators", "issues")
         if self.schema_version != PREVIEW_SCHEMA_VERSION:
             raise ValueError("unsupported discovery preview schema")
         if min(self.requested_records, self.discovered_records, self.selected_records) < 0:

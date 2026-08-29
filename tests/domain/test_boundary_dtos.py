@@ -1,41 +1,71 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
-from datetime import UTC, datetime
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from uuid import UUID
 
 import pytest
 
 from paper_insights.domain.acquisition import (
+    DiscoveryBatch,
     DiscoveryIssue,
+    DiscoveryPage,
     DiscoveryQuery,
+    DiscoveryRecord,
     ObservedAuthor,
     ObservedCategory,
     ObservedIdentifier,
     ObservedPaperVersion,
+    PreparedDiscovery,
     RecordLocator,
 )
 from paper_insights.domain.analysis import (
     AnalysisCacheKey,
     AnalysisPassage,
     AnalysisRequest,
+    AnalysisResponse,
     AnalysisState,
+    FullTextRequest,
 )
 from paper_insights.domain.corpus import (
     AttachPreparedRun,
+    BlobInspection,
     BlobWrite,
+    CreateCollection,
     CitationFormat,
     CitationResult,
+    CitationWarning,
     MetadataBlobRef,
+    IngestionRunRef,
+    PaperIdentity,
     PreparedSnapshotAttachment,
     RecordObservation,
     SnapshotRecordAttachment,
     StoredBlobRef,
 )
 from paper_insights.domain.errors import ErrorCode
-from paper_insights.domain.federation import FederatedSearchQuery
+from paper_insights.domain.federation import (
+    CorpusCapabilities,
+    CorpusId,
+    EvidenceBundle,
+    EvidenceBundleReceipt,
+    EvidenceItem,
+    EvidenceRef,
+    FederatedSearchQuery,
+    NativeCorpusHit,
+    SourceType,
+)
+from paper_insights.domain.identity import (
+    IdentityObservation,
+    IdentityObservationBatch,
+    IdentityQuery,
+    IdentityState,
+)
 from paper_insights.domain.identifiers import (
+    AuthorId,
     PaperId,
     PaperVersionId,
     PassageId,
@@ -44,9 +74,10 @@ from paper_insights.domain.identifiers import (
     SnapshotId,
     SourceId,
     VersionObservationId,
+    WatchlistId,
 )
-from paper_insights.domain.monitoring import CreateWatchlist, WatchlistSlug
-from paper_insights.domain.retrieval import CoverageStatus
+from paper_insights.domain.monitoring import CreateWatchlist, FinalizeWatchlistRun, WatchlistSlug
+from paper_insights.domain.retrieval import CatalogRevision, CoverageStatus, PublishedIndex
 
 
 ID = UUID("01890f3e-3b12-7cc0-98d6-4f6f94748f5a")
@@ -84,40 +115,106 @@ def observed() -> ObservedPaperVersion:
     )
 
 
-def test_attach_prepared_run_carries_complete_snapshot_graph() -> None:
-    locator = RecordLocator(0, 0, "2608.01234", "2608.01234v1", Sha256("c" * 64))
-    page = PreparedSnapshotAttachment(
-        page_ordinal=0,
+def prepared() -> PreparedDiscovery:
+    item = observed()
+    locator = RecordLocator(0, 0, item.source_item_id, item.source_version_key, Sha256("c" * 64))
+    page = DiscoveryPage(
         capture_id=ID,
-        blob=stored_blob(),
-        request_fingerprint=Sha256("d" * 64),
+        records=(DiscoveryRecord(locator=locator, observation=item),),
+        raw_payload=b"fixture page",
+        media_type="application/json",
         retrieved_at=NOW,
+        request_fingerprint=Sha256("d" * 64),
         next_cursor=None,
-        records=(SnapshotRecordAttachment(locator=locator),),
     )
-    command = AttachPreparedRun(
-        run_id=RunId(ID),
+    batch = DiscoveryBatch(
         source_id=SourceId("arxiv"),
-        prepared_digest=Sha256("e" * 64),
-        query_json='{"schema_version":"discovery-query-v1"}',
+        query=DiscoveryQuery(text="agents", limit=1),
         pages=(page,),
-        selected_locators=(locator,),
+        records=(item,),
+        issues=(),
+    )
+    return PreparedDiscovery.prepare(
+        batch=batch,
+        selected_records=(locator,),
+        prepared_at=NOW,
+        expires_at=NOW + timedelta(minutes=5),
     )
 
-    assert command.pages[0].records[0].locator == locator
+
+def attached_page(value: PreparedDiscovery) -> PreparedSnapshotAttachment:
+    page = value.batch.pages[0]
+    return PreparedSnapshotAttachment(
+        page_ordinal=0,
+        capture_id=page.capture_id,
+        blob=StoredBlobRef(
+            sha256=page.payload_sha256,
+            size_bytes=len(page.raw_payload),
+            media_type=page.media_type,
+            relative_path=Path("blobs/fixture"),
+        ),
+        request_fingerprint=page.request_fingerprint,
+        retrieved_at=page.retrieved_at,
+        next_cursor=page.next_cursor,
+        records=(SnapshotRecordAttachment(locator=page.records[0].locator),),
+    )
+
+
+def test_attach_prepared_run_carries_complete_snapshot_graph() -> None:
+    value = prepared()
+    command = AttachPreparedRun(
+        run_id=RunId(ID),
+        prepared=value,
+        pages=(attached_page(value),),
+    )
+
+    assert command.pages[0].records[0].locator == value.preview.selected_locators[0]
+    assert command.prepared_digest == value.digest
     assert command.selected_records == 1
+
+
+def test_attach_prepared_run_rejects_page_not_bound_to_prepared_manifest() -> None:
+    value = prepared()
+    page = attached_page(value)
+    bad_page = PreparedSnapshotAttachment(
+        page_ordinal=page.page_ordinal,
+        capture_id=page.capture_id,
+        blob=StoredBlobRef(
+            sha256=Sha256("f" * 64),
+            size_bytes=page.blob.size_bytes,
+            media_type=page.blob.media_type,
+            relative_path=page.blob.relative_path,
+        ),
+        request_fingerprint=page.request_fingerprint,
+        retrieved_at=page.retrieved_at,
+        next_cursor=page.next_cursor,
+        records=page.records,
+    )
+    with pytest.raises(ValueError):
+        AttachPreparedRun(run_id=RunId(ID), prepared=value, pages=(bad_page,))
 
 
 def test_record_observation_uses_unattached_metadata_blob() -> None:
     command = RecordObservation(
-        run_id=RunId(ID),
         snapshot_id=SnapshotId(ID),
         record_ordinal=0,
         observed=observed(),
-        metadata_blob=MetadataBlobRef(blob=stored_blob("f"), normalized_sha256=Sha256("b" * 64)),
+        metadata_blob=MetadataBlobRef(blob=stored_blob("b"), normalized_sha256=Sha256("b" * 64)),
     )
 
     assert command.metadata_blob.normalized_sha256 == command.observed.normalized_sha256
+
+
+def test_record_observation_rejects_ordinal_mismatch() -> None:
+    with pytest.raises(ValueError):
+        RecordObservation(
+            snapshot_id=SnapshotId(ID),
+            record_ordinal=1,
+            observed=observed(),
+            metadata_blob=MetadataBlobRef(
+                blob=stored_blob("b"), normalized_sha256=Sha256("b" * 64)
+            ),
+        )
 
 
 @pytest.mark.parametrize(
@@ -132,6 +229,19 @@ def test_record_observation_uses_unattached_metadata_blob() -> None:
             source_id=SourceId("arxiv"),
             query=DiscoveryQuery(text="x"),
             overlap_seconds=-1,
+        ),
+        lambda: CreateCollection("", ""),
+        lambda: IngestionRunRef(RunId(ID), revision=-1),
+        lambda: PaperIdentity(PaperId(ID), datetime(2026, 8, 29)),
+        lambda: BlobInspection(False, True, Sha256("a" * 64), 1),
+        lambda: PublishedIndex(Path("relative.sqlite3"), CatalogRevision(0), 0),
+        lambda: MetadataBlobRef(stored_blob("f"), Sha256("b" * 64)),
+        lambda: FinalizeWatchlistRun(
+            watchlist_id=WatchlistId(ID),
+            ingestion_run_id=RunId(ID),
+            expected_state_version=0,
+            candidate_cursor=None,
+            completed_at=datetime(2026, 8, 29, tzinfo=timezone(timedelta(hours=2))),
         ),
     ],
 )
@@ -156,10 +266,50 @@ def test_analysis_key_and_request_are_closed_and_ordered() -> None:
     )
     assert AnalysisState.COMPLETE.value == "complete"
     with pytest.raises(ValueError):
+        replace(key, parameters_json="[]")
+    with pytest.raises(ValueError):
         AnalysisRequest(
             key=key,
             passages=(AnalysisPassage(passage_id=PassageId("d" * 64), text="evidence"),),
         )
+
+
+@pytest.mark.parametrize(
+    "factory",
+    [
+        lambda: FullTextRequest(PaperVersionId(ID), " ", "policy-v1"),
+        lambda: FullTextRequest(PaperVersionId(ID), "http://example.test/paper.pdf", "v1"),
+        lambda: FullTextRequest(PaperVersionId(ID), "https://", "v1"),
+        lambda: AnalysisResponse(b"", ""),
+        lambda: IdentityQuery(AuthorId(ID), " "),
+        lambda: IdentityObservation(
+            SourceId("orcid"), "", "Ada", Sha256("a" * 64), datetime(2026, 8, 29)
+        ),
+        lambda: IdentityObservationBatch(
+            SourceId("orcid"),
+            (
+                IdentityObservation(
+                    SourceId("openalex"), "A1", "Ada", Sha256("a" * 64), NOW
+                ),
+            ),
+        ),
+        lambda: IdentityState((AuthorId(ID),), -1),
+        lambda: CorpusCapabilities((), False, False),
+        lambda: EvidenceRef(CorpusId("papers"), ""),
+        lambda: EvidenceItem(
+            EvidenceRef(CorpusId("papers"), "item-1"),
+            SourceType.PAPER,
+            "evidence",
+            Sha256("a" * 64),
+        ),
+        lambda: NativeCorpusHit("", SourceType.PAPER, 0, None, ""),
+        lambda: EvidenceBundle((), "unknown-v9"),
+        lambda: EvidenceBundleReceipt(Path("relative.json"), Sha256("a" * 64), -1),
+    ],
+)
+def test_later_wave_dtos_reject_invalid_values(factory: Callable[[], object]) -> None:
+    with pytest.raises(ValueError):
+        factory()
 
 
 def test_citation_result_requires_exact_schema_and_provenance() -> None:
@@ -181,5 +331,41 @@ def test_citation_result_requires_exact_schema_and_provenance() -> None:
         warnings=(),
     )
     assert CitationResult(**kwargs).source_item_id == "2608.01234"
+    rendered = CitationResult(
+        **{**kwargs, "warnings": (CitationWarning.LITERAL_AUTHOR,)}
+    )
+    assert json.dumps(rendered.warnings) == '["literal-author"]'
     with pytest.raises(ValueError):
         CitationResult(**{**kwargs, "schema_version": "future-v2"})
+    with pytest.raises(ValueError):
+        CitationResult(**{**kwargs, "missing_fields": ("title", "author")})
+    with pytest.raises(ValueError):
+        CitationResult(**{**kwargs, "warnings": ("arbitrary",)})
+
+
+def test_domain_dtos_reject_mutable_collection_aliases() -> None:
+    warnings = [CitationWarning.LITERAL_AUTHOR]
+    with pytest.raises(ValueError):
+        CitationResult(**{**_citation_kwargs(), "warnings": warnings})  # type: ignore[arg-type]
+    with pytest.raises(ValueError):
+        DiscoveryQuery(text="agents", categories=["cs.AI"])  # type: ignore[arg-type]
+
+
+def _citation_kwargs() -> dict[str, object]:
+    return {
+        "schema_version": "citation-v1",
+        "paper_id": PaperId(ID),
+        "paper_version_id": PaperVersionId(ID),
+        "version_observation_id": VersionObservationId(ID),
+        "format": CitationFormat.CSL_JSON,
+        "media_type": "application/vnd.citationstyles.csl+json",
+        "content": "{}",
+        "missing_fields": (),
+        "source_id": SourceId("arxiv"),
+        "source_item_id": "2608.01234",
+        "snapshot_id": SnapshotId(ID),
+        "record_ordinal": 0,
+        "retrieved_at": NOW,
+        "coverage": CoverageStatus.COMPLETE,
+        "warnings": (),
+    }

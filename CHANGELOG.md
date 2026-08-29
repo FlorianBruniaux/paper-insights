@@ -27,3 +27,8 @@ Toutes les modifications notables du projet sont consignées ici.
 - Le manifeste de découverte distingue chaque capture, la création de run attache ses snapshots dans une transaction unique et l'index FTS se publie comme une base auto-descriptive unique.
 - Les locators sélectionnés participent au digest, les preuves d'identité différées évitent toute FK vers une table future et la publication FTS refuse les journaux compagnons.
 - Les commandes catalogue transportent désormais le graphe complet des snapshots et des blobs non attachés; les DTO ferment outcomes, provenance de citation, filtres de recherche, reçu d'index et identité du cache d'analyse.
+- L'attachement catalogue est lié directement au manifeste préparé; les DTO publics valident leurs valeurs à la construction, les résultats de recherche bornent et ordonnent leurs hits, et les chemins d'index sont absolus.
+- Le contrôle d'architecture couvre les imports relatifs sans module, ignore les corps de lambda différés et gèle les signatures exactes de tous les ports annoncés.
+- Les passages vérifient leur identité déterministe, les acquisitions de texte exigent HTTPS et les résultats de citation utilisent un vocabulaire d'avertissements fermé.
+- Les deux couches internes refusent les imports d'infrastructure et tous les champs tuple des DTO rejettent les alias de collections mutables.
+- Pydantic reste interdit dans le domaine, les ports et l'application hors du futur module exact de validation de la frontière LLM prévu par WP-40.
