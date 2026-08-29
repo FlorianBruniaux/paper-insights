@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import replace
 from uuid import UUID
 
+import pytest
+
 from paper_insights.domain.identifiers import PaperVersionId, Sha256
 from paper_insights.domain.retrieval import PassageIdentity, passage_id
 
@@ -30,23 +32,45 @@ def test_passage_id_is_deterministic_and_covers_every_component() -> None:
         replace(identity, section="abstract"),
         replace(identity, ordinal=1),
         replace(identity, normalized_text="Other", end_offset=5),
-        replace(identity, start_offset=1),
-        replace(identity, end_offset=12),
+        replace(identity, start_offset=1, end_offset=14),
     )
     assert all(passage_id(item) != baseline for item in variants)
 
 
-def test_passage_text_is_normalized_before_hashing() -> None:
+def test_passage_id_uses_canonical_text() -> None:
     composed = PassageIdentity(
         paper_version_id=VERSION_ID,
         artifact_sha256=Sha256("a" * 64),
         chunk_schema_version="chunk-v1",
         section=None,
         ordinal=0,
-        normalized_text="Café\r\n",
+        normalized_text="Café\n",
         start_offset=0,
         end_offset=5,
     )
-    decomposed = replace(composed, normalized_text="Cafe\u0301\n")
+    assert passage_id(composed) == passage_id(composed)
 
-    assert passage_id(composed) == passage_id(decomposed)
+
+def test_passage_identity_rejects_noncanonical_text_and_invalid_offsets() -> None:
+    with pytest.raises(ValueError):
+        PassageIdentity(
+            paper_version_id=VERSION_ID,
+            artifact_sha256=Sha256("a" * 64),
+            chunk_schema_version="chunk-v1",
+            section=None,
+            ordinal=0,
+            normalized_text="line\r\n",
+            start_offset=0,
+            end_offset=5,
+        )
+    with pytest.raises(ValueError):
+        PassageIdentity(
+            paper_version_id=VERSION_ID,
+            artifact_sha256=Sha256("a" * 64),
+            chunk_schema_version="chunk-v1",
+            section=None,
+            ordinal=0,
+            normalized_text="short",
+            start_offset=0,
+            end_offset=6,
+        )

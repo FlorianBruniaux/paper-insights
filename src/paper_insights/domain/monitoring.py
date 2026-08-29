@@ -32,6 +32,10 @@ class WatchlistState:
     enabled: bool
     state_version: int
 
+    def __post_init__(self) -> None:
+        if self.overlap_seconds < 0 or self.state_version < 0:
+            raise ValueError("watchlist overlap and state version cannot be negative")
+
 
 @dataclass(frozen=True, slots=True)
 class CreateWatchlist:
@@ -39,6 +43,10 @@ class CreateWatchlist:
     source_id: SourceId
     query: DiscoveryQuery
     overlap_seconds: int = 0
+
+    def __post_init__(self) -> None:
+        if self.overlap_seconds < 0:
+            raise ValueError("watchlist overlap cannot be negative")
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,6 +57,10 @@ class UpdateWatchlist:
     overlap_seconds: int
     enabled: bool
 
+    def __post_init__(self) -> None:
+        if self.expected_state_version < 0 or self.overlap_seconds < 0:
+            raise ValueError("watchlist versions and overlap cannot be negative")
+
 
 @dataclass(frozen=True, slots=True)
 class FinalizeWatchlistRun:
@@ -57,6 +69,12 @@ class FinalizeWatchlistRun:
     expected_state_version: int
     candidate_cursor: str | None
     completed_at: datetime
+
+    def __post_init__(self) -> None:
+        if self.expected_state_version < 0:
+            raise ValueError("watchlist state version cannot be negative")
+        if self.completed_at.tzinfo is None or self.completed_at.utcoffset() is None:
+            raise ValueError("watchlist completion timestamp must be aware")
 
 
 @dataclass(frozen=True, slots=True)

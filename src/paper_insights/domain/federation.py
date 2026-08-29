@@ -39,6 +39,10 @@ class FederatedSearchQuery:
     query: str
     limit_per_corpus: int
 
+    def __post_init__(self) -> None:
+        if not self.query.strip() or not 1 <= self.limit_per_corpus <= 50:
+            raise ValueError("invalid federated search query")
+
 
 @dataclass(frozen=True, slots=True)
 class EvidenceRef:

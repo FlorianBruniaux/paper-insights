@@ -8,6 +8,7 @@ import pytest
 
 from paper_insights.domain.acquisition import (
     DiscoveryBatch,
+    DiscoveryIssue,
     DiscoveryPage,
     DiscoveryQuery,
     DiscoveryRecord,
@@ -16,6 +17,7 @@ from paper_insights.domain.acquisition import (
     RecordLocator,
     prepared_discovery_digest,
 )
+from paper_insights.domain.errors import ErrorCode
 from paper_insights.domain.identifiers import Sha256, SourceId
 
 
@@ -72,6 +74,41 @@ def test_prepared_digest_is_deterministic_and_covers_query_locator_and_page() ->
     assert digest != prepared_discovery_digest(make_batch(text="different"), (locator,))
     assert digest != prepared_discovery_digest(make_batch(payload=b"different"), (locator,))
     assert digest != prepared_discovery_digest(batch, (replace(locator, record_ordinal=1),))
+    assert digest != prepared_discovery_digest(
+        replace(
+            batch,
+            pages=(
+                replace(
+                    batch.pages[0],
+                    capture_id=UUID("01890f3e-3b12-7cc0-98d6-4f6f94748f5b"),
+                ),
+            ),
+        ),
+        (locator,),
+    )
+    crossref_observation = replace(batch.records[0], source_id=SourceId("crossref"))
+    crossref_record = replace(batch.pages[0].records[0], observation=crossref_observation)
+    crossref_batch = replace(
+        batch,
+        source_id=SourceId("crossref"),
+        pages=(replace(batch.pages[0], records=(crossref_record,)),),
+        records=(crossref_observation,),
+    )
+    assert digest != prepared_discovery_digest(crossref_batch, (locator,))
+    assert digest != prepared_discovery_digest(
+        replace(
+            batch,
+            pages=(replace(batch.pages[0], retrieved_at=NOW + timedelta(seconds=1)),),
+        ),
+        (locator,),
+    )
+    assert digest != prepared_discovery_digest(
+        replace(
+            batch,
+            pages=(replace(batch.pages[0], request_fingerprint=Sha256("e" * 64)),),
+        ),
+        (locator,),
+    )
 
 
 def test_prepared_discovery_validates_expiry_and_manifest() -> None:
@@ -94,6 +131,14 @@ def test_prepared_discovery_validates_expiry_and_manifest() -> None:
         replace(prepared, preview=replace(prepared.preview, schema_version="future-v2"))
     with pytest.raises(ValueError):
         replace(prepared, preview=replace(prepared.preview, selected_records=0))
+    with pytest.raises(ValueError):
+        replace(
+            prepared,
+            preview=replace(
+                prepared.preview,
+                issues=(DiscoveryIssue(ErrorCode.RECORD_INVALID, "bad record"),),
+            ),
+        )
     with pytest.raises(ValueError):
         PreparedDiscovery.prepare(
             batch=batch,
@@ -153,6 +198,20 @@ def test_selected_records_must_follow_page_order() -> None:
         PreparedDiscovery.prepare(
             batch=two_records,
             selected_records=(second.locator, first.locator),
+            prepared_at=NOW,
+            expires_at=NOW + timedelta(minutes=15),
+        )
+
+
+def test_selected_record_requires_a_normalized_observation() -> None:
+    batch = make_batch()
+    failed = replace(batch.pages[0].records[0], observation=None)
+    failed_batch = replace(batch, pages=(replace(batch.pages[0], records=(failed,)),), records=())
+
+    with pytest.raises(ValueError):
+        PreparedDiscovery.prepare(
+            batch=failed_batch,
+            selected_records=(failed.locator,),
             prepared_at=NOW,
             expires_at=NOW + timedelta(minutes=15),
         )

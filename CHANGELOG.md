@@ -26,3 +26,4 @@ Toutes les modifications notables du projet sont consignées ici.
 - `doctor` est spécifié strictement read-only; la récupération passe par `repair interrupted-runs --yes`.
 - Le manifeste de découverte distingue chaque capture, la création de run attache ses snapshots dans une transaction unique et l'index FTS se publie comme une base auto-descriptive unique.
 - Les locators sélectionnés participent au digest, les preuves d'identité différées évitent toute FK vers une table future et la publication FTS refuse les journaux compagnons.
+- Les commandes catalogue transportent désormais le graphe complet des snapshots et des blobs non attachés; les DTO ferment outcomes, provenance de citation, filtres de recherche, reçu d'index et identité du cache d'analyse.

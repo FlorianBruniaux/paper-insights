@@ -59,3 +59,5 @@ def test_paper_and_version_selectors_are_exact_and_exclusive() -> None:
             source_version_key=None,
             current=False,
         )
+    with pytest.raises(ValueError):
+        PaperSelector.by_doi("10./")

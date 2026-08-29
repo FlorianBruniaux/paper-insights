@@ -9,6 +9,7 @@ _SOURCE_ID = re.compile(r"^[a-z][a-z0-9-]{0,63}$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _ARXIV_ID = re.compile(r"^(?:[a-z-]+(?:\.[A-Z]{2})?/\d{7}|\d{4}\.\d{4,5})$")
 _ARXIV_VERSION = re.compile(r"^(?:[a-z-]+(?:\.[A-Z]{2})?/\d{7}|\d{4}\.\d{4,5})v[1-9]\d*$")
+_DOI = re.compile(r"^10\.\d{4,9}/[^\s/]+(?:/[^\s/]+)*$")
 
 
 @dataclass(frozen=True, slots=True)
@@ -124,11 +125,7 @@ class PaperSelector:
         if self.arxiv_id is not None and not _ARXIV_ID.fullmatch(self.arxiv_id):
             raise ValueError("invalid canonical arXiv identifier")
         if self.doi is not None:
-            canonical_doi = (
-                self.doi == self.doi.lower()
-                and self.doi.startswith("10.")
-                and "/" in self.doi
-            )
+            canonical_doi = self.doi == self.doi.lower() and _DOI.fullmatch(self.doi)
             if not canonical_doi:
                 raise ValueError("invalid canonical DOI")
 

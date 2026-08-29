@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
+from paper_insights.domain.errors import ErrorCode
 from paper_insights.domain.identifiers import Sha256, SourceId
 
 
@@ -90,6 +91,38 @@ class RecordLocator:
 
 
 @dataclass(frozen=True, slots=True)
+class ObservedAuthor:
+    raw_name: str
+    given_name: str | None = None
+    family_name: str | None = None
+    affiliation_raw: str | None = None
+
+    def __post_init__(self) -> None:
+        if not self.raw_name:
+            raise ValueError("observed author name is required")
+
+
+@dataclass(frozen=True, slots=True)
+class ObservedCategory:
+    value: str
+    is_primary: bool = False
+
+    def __post_init__(self) -> None:
+        if not self.value:
+            raise ValueError("observed category is required")
+
+
+@dataclass(frozen=True, slots=True)
+class ObservedIdentifier:
+    scheme: str
+    canonical_value: str
+
+    def __post_init__(self) -> None:
+        if not self.scheme or not self.canonical_value:
+            raise ValueError("observed identifier requires scheme and value")
+
+
+@dataclass(frozen=True, slots=True)
 class ObservedPaperVersion:
     source_id: SourceId
     source_item_id: str
@@ -99,14 +132,25 @@ class ObservedPaperVersion:
     page_ordinal: int
     record_ordinal: int
     normalized_sha256: Sha256
-    authors: tuple[str, ...] = ()
-    categories: tuple[str, ...] = ()
+    authors: tuple[ObservedAuthor, ...] = ()
+    categories: tuple[ObservedCategory, ...] = ()
+    identifiers: tuple[ObservedIdentifier, ...] = ()
+    comment: str | None = None
+    journal_reference: str | None = None
+    language: str | None = None
+    source_url: str | None = None
+    submitted_at: datetime | None = None
+    announced_at: datetime | None = None
 
     def __post_init__(self) -> None:
         if not self.source_item_id or not self.source_version_key or not self.title:
             raise ValueError("observed paper version requires source identity and title")
         if self.page_ordinal < 0 or self.record_ordinal < 0:
             raise ValueError("observation ordinals must be non-negative")
+        if self.submitted_at is not None:
+            _require_utc(self.submitted_at, "submitted_at")
+        if self.announced_at is not None:
+            _require_utc(self.announced_at, "announced_at")
 
 
 @dataclass(frozen=True, slots=True)
@@ -153,10 +197,18 @@ class DiscoveryPage:
 
 @dataclass(frozen=True, slots=True)
 class DiscoveryIssue:
-    code: str
+    code: ErrorCode
     message: str
     page_ordinal: int | None = None
     record_ordinal: int | None = None
+
+    def __post_init__(self) -> None:
+        if not self.message:
+            raise ValueError("discovery issue message is required")
+        if self.page_ordinal is not None and self.page_ordinal < 0:
+            raise ValueError("issue page ordinal cannot be negative")
+        if self.record_ordinal is not None and self.record_ordinal < 0:
+            raise ValueError("issue record ordinal cannot be negative")
 
 
 @dataclass(frozen=True, slots=True)
@@ -215,11 +267,19 @@ def _validate_selected_records(
     batch: DiscoveryBatch, selected_records: tuple[RecordLocator, ...]
 ) -> None:
     ordered = tuple(record.locator for page in batch.pages for record in page.records)
+    selectable = {
+        record.locator
+        for page in batch.pages
+        for record in page.records
+        if record.observation is not None
+    }
     if len(set(selected_records)) != len(selected_records):
         raise ValueError("selected records cannot contain duplicates")
     positions = {locator: position for position, locator in enumerate(ordered)}
     if any(locator not in positions for locator in selected_records):
         raise ValueError("selected record is not present in the batch")
+    if any(locator not in selectable for locator in selected_records):
+        raise ValueError("selected record has no normalized observation")
     selected_positions = tuple(positions[locator] for locator in selected_records)
     if selected_positions != tuple(sorted(selected_positions)):
         raise ValueError("selected records must preserve page and record order")
@@ -271,6 +331,8 @@ class PreparedDiscovery:
             raise ValueError("preview discovered count differs from batch")
         if self.preview.selected_records != len(self.preview.selected_locators):
             raise ValueError("preview selected count differs from locators")
+        if self.preview.issues != self.batch.issues:
+            raise ValueError("preview issues differ from batch")
         if (
             self.preview.prepared_at != self.prepared_at
             or self.preview.expires_at != self.expires_at

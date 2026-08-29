@@ -83,7 +83,7 @@ class DiscoveryPage:
     raw_payload: bytes
     media_type: str
     retrieved_at: datetime
-    request_fingerprint: str
+    request_fingerprint: Sha256
     next_cursor: str | None
 
 
@@ -100,7 +100,7 @@ class DiscoveryBatch:
 class PreparedDiscovery:
     batch: DiscoveryBatch
     preview: DiscoveryPreview
-    digest: str
+    digest: Sha256
     prepared_at: datetime
     expires_at: datetime
 
@@ -129,7 +129,12 @@ class CatalogUnitOfWork(Protocol):
     collections: CollectionRepository
 
     def __enter__(self) -> CatalogUnitOfWork: ...
-    def __exit__(self, exc_type: object, exc: object, tb: object) -> bool: ...
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> bool: ...
     def commit(self) -> None: ...
     def rollback(self) -> None: ...
 
@@ -148,7 +153,7 @@ class FederatedCorpus(Protocol):
     def resolve_evidence(self, ref: EvidenceRef) -> EvidenceItem | None: ...
 ```
 
-`PaperSearchResult` and `PassageSearchResult` carry hits, coverage, catalogue and index revisions, `truncated`, `returned` and `available`. Every normalized observation carries page and record ordinals. The ordered `DiscoveryBatch.records` view must equal the observations embedded in its pages.
+`PaperSearchResult` and `PassageSearchResult` carry hits, coverage, catalogue and index revisions, `truncated`, `returned`, `available` and the applied limit. Every normalized observation carries page and record ordinals. The ordered `DiscoveryBatch.records` view must equal the observations embedded in its pages.
 
 Gate 0 also freezes synchronous ports for `SearchIndexBuilder`, `CitationRenderer`, `WatchlistUnitOfWorkFactory`, `FullTextProvider`, `TextExtractor`, `AnalysisUnitOfWorkFactory`, `IdentityUnitOfWorkFactory` and `EvidenceBundleWriter`. Their complete signatures and DTO names live in `docs/specs/PORTS.md`. Workers may add implementations but may not change these contracts.
 

@@ -1,8 +1,19 @@
 from __future__ import annotations
 
+from uuid import UUID
+
 import pytest
 
-from paper_insights.domain.corpus import IngestionStatus, RunCounters
+from paper_insights.domain.corpus import (
+    IngestionOutcome,
+    IngestionStatus,
+    RecordObservationResult,
+    RunCounters,
+)
+from paper_insights.domain.identifiers import PaperId, PaperVersionId, VersionObservationId
+
+
+UUID7 = UUID("01890f3e-3b12-7cc0-98d6-4f6f94748f5a")
 
 
 def test_run_counters_enforce_exact_sum() -> None:
@@ -42,3 +53,14 @@ def test_invalid_run_counters_are_rejected(values: dict[str, int]) -> None:
     defaults.update(values)
     with pytest.raises(ValueError):
         RunCounters(**defaults)
+
+
+def test_ingestion_outcomes_are_closed_and_created_paper_is_consistent() -> None:
+    with pytest.raises(ValueError):
+        RecordObservationResult(
+            paper_id=PaperId(UUID7),
+            paper_version_id=PaperVersionId(UUID7),
+            version_observation_id=VersionObservationId(UUID7),
+            outcome=IngestionOutcome.UNCHANGED,
+            created_paper=True,
+        )

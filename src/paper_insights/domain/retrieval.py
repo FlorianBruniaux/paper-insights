@@ -4,6 +4,7 @@ import hashlib
 import json
 import unicodedata
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from enum import Enum
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from paper_insights.domain.identifiers import (
     PaperVersionId,
     PassageId,
     Sha256,
+    SourceId,
     VersionObservationId,
 )
 
@@ -48,6 +50,10 @@ class PassageIdentity:
             raise ValueError("chunk schema version is required")
         if self.ordinal < 0 or self.start_offset < 0 or self.end_offset < self.start_offset:
             raise ValueError("invalid passage ordinal or offsets")
+        if _normalized_text(self.normalized_text) != self.normalized_text:
+            raise ValueError("passage text must already be normalized")
+        if self.end_offset - self.start_offset != len(self.normalized_text):
+            raise ValueError("passage offsets must span the normalized text")
 
 
 def _normalized_text(value: str) -> str:
@@ -87,11 +93,39 @@ class IndexBuildRequest:
 
 
 @dataclass(frozen=True, slots=True)
+class IndexReceipt:
+    index_schema_version: str
+    chunk_schema_version: str
+    generation: int
+    catalog_revision: CatalogRevision
+    document_count: int
+    passage_count: int
+    content_sha256: Sha256
+
+    def __post_init__(self) -> None:
+        if not self.index_schema_version or not self.chunk_schema_version:
+            raise ValueError("index receipt schema versions are required")
+        if min(self.generation, self.document_count, self.passage_count) < 0:
+            raise ValueError("index receipt counts cannot be negative")
+
+
+@dataclass(frozen=True, slots=True)
 class IndexCandidate:
     path: Path
     catalog_revision: CatalogRevision
     generation: int
     content_sha256: Sha256
+    receipt: IndexReceipt
+
+    def __post_init__(self) -> None:
+        if self.path.is_absolute() or self.generation < 0:
+            raise ValueError("index candidate path or generation is invalid")
+        if (
+            self.receipt.catalog_revision != self.catalog_revision
+            or self.receipt.generation != self.generation
+            or self.receipt.content_sha256 != self.content_sha256
+        ):
+            raise ValueError("index candidate differs from its receipt")
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,8 +136,28 @@ class PublishedIndex:
 
 
 @dataclass(frozen=True, slots=True)
+class SearchFilters:
+    source_id: SourceId | None = None
+    category: str | None = None
+    author: str | None = None
+    language: str | None = None
+    date_from: datetime | None = None
+    date_to: datetime | None = None
+    collection: str | None = None
+
+    def __post_init__(self) -> None:
+        for value in (self.date_from, self.date_to):
+            if value is not None and value.utcoffset() != timedelta(0):
+                raise ValueError("search filter dates must use UTC")
+        if self.date_from is not None and self.date_to is not None:
+            if self.date_from > self.date_to:
+                raise ValueError("search date range is inverted")
+
+
+@dataclass(frozen=True, slots=True)
 class PaperSearchQuery:
     query: str
+    filters: SearchFilters = SearchFilters()
     limit: int = 10
 
     def __post_init__(self) -> None:
@@ -114,6 +168,7 @@ class PaperSearchQuery:
 @dataclass(frozen=True, slots=True)
 class PassageSearchQuery:
     query: str
+    filters: SearchFilters = SearchFilters()
     limit: int = 10
 
     def __post_init__(self) -> None:
@@ -130,6 +185,10 @@ class PaperSearchHit:
     rank: int
     bm25_score: float
     artifact_sha256: Sha256
+
+    def __post_init__(self) -> None:
+        if self.rank < 1 or not self.title:
+            raise ValueError("paper search hit rank and title are required")
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,6 +207,10 @@ class PassageSearchHit:
     bm25_score: float
     excerpt: str
 
+    def __post_init__(self) -> None:
+        if self.rank < 1:
+            raise ValueError("passage search hit rank must be positive")
+
 
 def _validate_result(
     hits: tuple[object, ...], returned: int, available: int | None, truncated: bool
@@ -158,6 +221,8 @@ def _validate_result(
         raise ValueError("available cannot be less than returned")
     if truncated and available is not None and available <= returned:
         raise ValueError("truncated results require undisclosed available hits")
+    if not truncated and available is not None and available > returned:
+        raise ValueError("unreturned available hits require truncation")
 
 
 @dataclass(frozen=True, slots=True)
@@ -169,9 +234,19 @@ class PaperSearchResult:
     truncated: bool
     returned: int
     available: int | None
+    applied_limit: int
 
     def __post_init__(self) -> None:
         _validate_result(self.hits, self.returned, self.available, self.truncated)
+        if not 1 <= self.applied_limit <= 50:
+            raise ValueError("invalid applied paper-search limit")
+        if (
+            self.coverage is CoverageStatus.COMPLETE
+            and self.catalog_revision != self.index_revision
+        ):
+            raise ValueError("complete coverage requires matching revisions")
+        if self.coverage is CoverageStatus.UNAVAILABLE and self.hits:
+            raise ValueError("unavailable coverage cannot contain hits")
 
 
 @dataclass(frozen=True, slots=True)
@@ -183,6 +258,16 @@ class PassageSearchResult:
     truncated: bool
     returned: int
     available: int | None
+    applied_limit: int
 
     def __post_init__(self) -> None:
         _validate_result(self.hits, self.returned, self.available, self.truncated)
+        if not 1 <= self.applied_limit <= 50:
+            raise ValueError("invalid applied passage-search limit")
+        if (
+            self.coverage is CoverageStatus.COMPLETE
+            and self.catalog_revision != self.index_revision
+        ):
+            raise ValueError("complete coverage requires matching revisions")
+        if self.coverage is CoverageStatus.UNAVAILABLE and self.hits:
+            raise ValueError("unavailable coverage cannot contain hits")
