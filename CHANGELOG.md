@@ -18,6 +18,7 @@ Toutes les modifications notables du projet sont consignées ici.
 - Specs normatives pour watchlists, analyses sourcées, identité réversible des auteurs et fédération multi-corpus.
 - Contrats fermés pour collections, trois formats de citation, six outils MCP, enveloppes JSON et codes de sortie CLI.
 - Contrat complet des ports synchrones, preuves d'identifiants séparées et artefacts bibliographiques versionnés.
+- Types de domaine immuables, ports synchrones et tests d'architecture de Gate 0.
 
 ### Changed
 

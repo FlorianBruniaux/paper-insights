@@ -1,0 +1,1 @@
+"""Paper Insights domain package."""
