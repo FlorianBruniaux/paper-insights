@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import stat
 from pathlib import Path
 
 import pytest
@@ -53,7 +54,7 @@ def test_put_cleans_private_temporary_file_when_replace_fails(
     content = b"not published"
     digest = hashlib.sha256(content).hexdigest()
 
-    def fail_replace(source: str | Path, destination: str | Path) -> None:
+    def fail_replace(source: str | Path, destination: str | Path, **kwargs: object) -> None:
         raise OSError("injected replace failure")
 
     monkeypatch.setattr(os, "replace", fail_replace)
@@ -78,6 +79,70 @@ def test_put_rejects_symlink_escape_without_touching_target(tmp_path: Path) -> N
         store.put(BlobWrite(content=b"escape", media_type="text/plain"))
 
     assert tuple(outside.iterdir()) == ()
+
+
+def test_put_does_not_follow_parent_replaced_by_symlink_during_publication(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    data_root = tmp_path / "corpus"
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    store = FilesystemBlobStore(CorpusPaths.from_data_root(data_root))
+    real_publish = store._publish_at
+    checked_parent: Path | None = None
+
+    def replace_checked_parent(
+        parent_descriptor: int,
+        filename: str,
+        content: bytes,
+        digest: str,
+    ) -> None:
+        nonlocal checked_parent
+        parent = data_root / store._relative_path(digest).parent
+        checked_parent = tmp_path / "checked-parent"
+        parent.rename(checked_parent)
+        parent.symlink_to(outside, target_is_directory=True)
+        real_publish(parent_descriptor, filename, content, digest)
+
+    monkeypatch.setattr(store, "_publish_at", replace_checked_parent)
+
+    with pytest.raises(BlobStoreError, match="unsafe blob path"):
+        store.put(BlobWrite(content=b"race", media_type="text/plain"))
+
+    assert checked_parent is not None
+    assert tuple(outside.iterdir()) == ()
+
+
+def test_put_fsyncs_every_parent_that_receives_a_new_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    paths = CorpusPaths.from_data_root(tmp_path / "corpus")
+    store = FilesystemBlobStore(paths)
+    directory_syncs: set[tuple[int, int]] = set()
+    real_fsync = os.fsync
+
+    def record_fsync(descriptor: int) -> None:
+        metadata = os.fstat(descriptor)
+        if stat.S_ISDIR(metadata.st_mode):
+            directory_syncs.add((metadata.st_dev, metadata.st_ino))
+        real_fsync(descriptor)
+
+    monkeypatch.setattr(os, "fsync", record_fsync)
+
+    ref = store.put(BlobWrite(content=b"durable", media_type="text/plain"))
+
+    leaf = paths.confined(ref.relative_path).parent
+    expected_synced_directories = {
+        (path.stat().st_dev, path.stat().st_ino)
+        for path in (
+            paths.data_root.parent,
+            paths.data_root,
+            paths.blobs,
+            leaf.parent,
+            leaf,
+        )
+    }
+    assert expected_synced_directories <= directory_syncs
 
 
 def test_open_verified_rejects_content_changed_after_publication(tmp_path: Path) -> None:

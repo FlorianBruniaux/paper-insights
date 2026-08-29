@@ -3,14 +3,17 @@ from __future__ import annotations
 import hashlib
 import io
 import os
+import secrets
 import stat
-import tempfile
 from pathlib import Path
 from typing import BinaryIO
 
 from paper_insights.domain.corpus import BlobInspection, BlobWrite, StoredBlobRef
 from paper_insights.domain.identifiers import Sha256
 from paper_insights.paths import CorpusPaths, PathBoundaryError
+
+_DIRECTORY_FLAGS = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+_READ_FLAGS = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
 
 
 class BlobStoreError(OSError):
@@ -30,20 +33,34 @@ class FilesystemBlobStore:
             media_type=blob.media_type,
             relative_path=relative_path,
         )
+        parent_descriptor = -1
         try:
-            final_path = self._confined(relative_path)
-            self._ensure_directory(final_path.parent)
-            if final_path.exists() or final_path.is_symlink():
-                if self._verified_bytes(ref) != blob.content:
+            parent_descriptor = self._open_blob_parent(relative_path, create=True)
+            self._assert_directory_binding(
+                parent_descriptor, self.paths.data_root / relative_path.parent
+            )
+            filename = relative_path.name
+            try:
+                existing = self._verified_bytes_at(parent_descriptor, filename, ref)
+            except FileNotFoundError:
+                existing = None
+            if existing is not None:
+                if existing != blob.content:
                     raise BlobStoreError("existing blob verification failed")
                 return ref
-            self._publish(final_path, blob.content, digest)
-            if self._verified_bytes(ref) != blob.content:
+            self._publish_at(parent_descriptor, filename, blob.content, digest)
+            self._assert_directory_binding(
+                parent_descriptor, self.paths.data_root / relative_path.parent
+            )
+            if self._verified_bytes_at(parent_descriptor, filename, ref) != blob.content:
                 raise BlobStoreError("published blob verification failed")
         except BlobStoreError:
             raise
         except (OSError, PathBoundaryError) as exc:
-            raise BlobStoreError("could not publish blob") from exc
+            raise BlobStoreError("unsafe blob path") from exc
+        finally:
+            if parent_descriptor >= 0:
+                os.close(parent_descriptor)
         return ref
 
     def open_verified(self, ref: StoredBlobRef) -> BinaryIO:
@@ -51,19 +68,15 @@ class FilesystemBlobStore:
 
     def inspect(self, ref: StoredBlobRef) -> BlobInspection:
         try:
-            path = self._confined(ref.relative_path)
-        except (BlobStoreError, PathBoundaryError):
-            return BlobInspection(exists=True, valid=False, sha256=ref.sha256, size_bytes=None)
-        if not path.exists() and not path.is_symlink():
-            return BlobInspection(exists=False, valid=False, sha256=ref.sha256, size_bytes=None)
-        try:
             content = self._verified_bytes(ref)
         except BlobStoreError:
             try:
+                path = self._confined(ref.relative_path)
                 size = path.stat(follow_symlinks=False).st_size
-            except OSError:
+            except (BlobStoreError, OSError, PathBoundaryError):
                 size = None
-            return BlobInspection(exists=True, valid=False, sha256=ref.sha256, size_bytes=size)
+            exists = size is not None
+            return BlobInspection(exists=exists, valid=False, sha256=ref.sha256, size_bytes=size)
         return BlobInspection(
             exists=True,
             valid=True,
@@ -110,41 +123,103 @@ class FilesystemBlobStore:
         except PathBoundaryError as exc:
             raise BlobStoreError("unsafe blob path") from exc
 
-    def _ensure_directory(self, directory: Path) -> None:
-        self.paths.data_root.mkdir(mode=0o700, parents=True, exist_ok=True)
-        relative = directory.relative_to(self.paths.data_root)
-        current = self.paths.data_root
-        for part in relative.parts:
-            current = current / part
-            if current.is_symlink():
-                raise BlobStoreError("unsafe blob path")
-            try:
-                current.mkdir(mode=0o700)
-            except FileExistsError:
-                if not current.is_dir() or current.is_symlink():
-                    raise BlobStoreError("unsafe blob path") from None
-
-    def _publish(self, final_path: Path, content: bytes, digest: str) -> None:
-        descriptor = -1
-        temporary_name: str | None = None
+    def _open_blob_parent(self, relative_path: Path, *, create: bool) -> int:
+        if not relative_path.parts or relative_path.parts[0] != "blobs":
+            raise BlobStoreError("unsafe blob path")
+        current = self._open_absolute_directory(self.paths.data_root, create=create)
         try:
-            descriptor, temporary_name = tempfile.mkstemp(
-                prefix=f".{digest}.",
-                suffix=".tmp",
-                dir=final_path.parent,
+            for part in relative_path.parent.parts:
+                current = self._open_child_directory(current, part, create=create)
+            return current
+        except BaseException:
+            os.close(current)
+            raise
+
+    @staticmethod
+    def _open_absolute_directory(path: Path, *, create: bool) -> int:
+        if not path.is_absolute():
+            raise BlobStoreError("unsafe blob path")
+        current = os.open(path.anchor, _DIRECTORY_FLAGS)
+        try:
+            for part in path.parts[1:]:
+                current = FilesystemBlobStore._open_child_directory(current, part, create=create)
+            return current
+        except BaseException:
+            os.close(current)
+            raise
+
+    @staticmethod
+    def _open_child_directory(parent_descriptor: int, name: str, *, create: bool) -> int:
+        created = False
+        child_descriptor = -1
+        if create:
+            try:
+                os.mkdir(name, mode=0o700, dir_fd=parent_descriptor)
+                created = True
+            except FileExistsError:
+                pass
+        try:
+            child_descriptor = os.open(name, _DIRECTORY_FLAGS, dir_fd=parent_descriptor)
+            if created:
+                os.fsync(parent_descriptor)
+            os.close(parent_descriptor)
+            return child_descriptor
+        except BaseException:
+            if child_descriptor >= 0:
+                os.close(child_descriptor)
+            raise
+
+    @staticmethod
+    def _assert_directory_binding(descriptor: int, path: Path) -> None:
+        check_descriptor = -1
+        try:
+            check_descriptor = FilesystemBlobStore._open_absolute_directory(path, create=False)
+            expected = os.fstat(descriptor)
+            actual = os.fstat(check_descriptor)
+            if (expected.st_dev, expected.st_ino) != (actual.st_dev, actual.st_ino):
+                raise BlobStoreError("unsafe blob path")
+        except BlobStoreError:
+            raise
+        except OSError as exc:
+            raise BlobStoreError("unsafe blob path") from exc
+        finally:
+            if check_descriptor >= 0:
+                os.close(check_descriptor)
+
+    def _publish_at(
+        self,
+        parent_descriptor: int,
+        filename: str,
+        content: bytes,
+        digest: str,
+    ) -> None:
+        temporary_name = f".{digest}.{secrets.token_hex(8)}.tmp"
+        descriptor = -1
+        temporary_exists = False
+        try:
+            descriptor = os.open(
+                temporary_name,
+                os.O_RDWR | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
+                0o600,
+                dir_fd=parent_descriptor,
             )
+            temporary_exists = True
             os.fchmod(descriptor, 0o600)
-            with os.fdopen(descriptor, "wb", closefd=True) as stream:
-                descriptor = -1
-                stream.write(content)
-                stream.flush()
-                os.fsync(stream.fileno())
-            temporary_path = Path(temporary_name)
-            if self._hash_file(temporary_path) != digest:
+            view = memoryview(content)
+            written = 0
+            while written < len(view):
+                written += os.write(descriptor, view[written:])
+            os.fsync(descriptor)
+            if self._hash_descriptor(descriptor) != digest:
                 raise BlobStoreError("temporary blob verification failed")
-            os.replace(temporary_path, final_path)
-            temporary_name = None
-            self._fsync_directory(final_path.parent)
+            os.replace(
+                temporary_name,
+                filename,
+                src_dir_fd=parent_descriptor,
+                dst_dir_fd=parent_descriptor,
+            )
+            temporary_exists = False
+            os.fsync(parent_descriptor)
         except BlobStoreError:
             raise
         except OSError as exc:
@@ -152,46 +227,55 @@ class FilesystemBlobStore:
         finally:
             if descriptor >= 0:
                 os.close(descriptor)
-            if temporary_name is not None:
+            if temporary_exists:
                 try:
-                    Path(temporary_name).unlink(missing_ok=True)
+                    os.unlink(temporary_name, dir_fd=parent_descriptor)
                 except OSError:
                     pass
 
     def _verified_bytes(self, ref: StoredBlobRef) -> bytes:
+        parent_descriptor = -1
         try:
-            path = self._confined(ref.relative_path)
-            flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
-            descriptor = os.open(path, flags)
-            try:
-                metadata = os.fstat(descriptor)
-                if not stat.S_ISREG(metadata.st_mode):
-                    raise BlobStoreError("blob verification failed")
-                with os.fdopen(descriptor, "rb", closefd=False) as stream:
-                    content = stream.read()
-            finally:
-                os.close(descriptor)
+            parent_descriptor = self._open_blob_parent(ref.relative_path, create=False)
+            self._assert_directory_binding(
+                parent_descriptor, self.paths.data_root / ref.relative_path.parent
+            )
+            content = self._verified_bytes_at(parent_descriptor, ref.relative_path.name, ref)
+            self._assert_directory_binding(
+                parent_descriptor, self.paths.data_root / ref.relative_path.parent
+            )
+            return content
         except BlobStoreError:
             raise
         except (OSError, PathBoundaryError) as exc:
             raise BlobStoreError("blob verification failed") from exc
-        digest = hashlib.sha256(content).hexdigest()
-        if digest != str(ref.sha256) or len(content) != ref.size_bytes:
+        finally:
+            if parent_descriptor >= 0:
+                os.close(parent_descriptor)
+
+    @staticmethod
+    def _verified_bytes_at(parent_descriptor: int, filename: str, ref: StoredBlobRef) -> bytes:
+        descriptor = os.open(filename, _READ_FLAGS, dir_fd=parent_descriptor)
+        try:
+            metadata = os.fstat(descriptor)
+            if not stat.S_ISREG(metadata.st_mode):
+                raise BlobStoreError("blob verification failed")
+            chunks: list[bytes] = []
+            digest = hashlib.sha256()
+            while chunk := os.read(descriptor, 1024 * 1024):
+                chunks.append(chunk)
+                digest.update(chunk)
+            content = b"".join(chunks)
+        finally:
+            os.close(descriptor)
+        if digest.hexdigest() != str(ref.sha256) or len(content) != ref.size_bytes:
             raise BlobStoreError("blob verification failed")
         return content
 
     @staticmethod
-    def _hash_file(path: Path) -> str:
+    def _hash_descriptor(descriptor: int) -> str:
+        os.lseek(descriptor, 0, os.SEEK_SET)
         digest = hashlib.sha256()
-        with path.open("rb") as stream:
-            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-                digest.update(chunk)
+        while chunk := os.read(descriptor, 1024 * 1024):
+            digest.update(chunk)
         return digest.hexdigest()
-
-    @staticmethod
-    def _fsync_directory(directory: Path) -> None:
-        descriptor = os.open(directory, os.O_RDONLY)
-        try:
-            os.fsync(descriptor)
-        finally:
-            os.close(descriptor)
