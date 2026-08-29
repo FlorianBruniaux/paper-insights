@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<atom:feed xmlns:atom="http://www.w3.org/2005/Atom"
+           xmlns:arxiv="http://arxiv.org/schemas/atom"
+           xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/">
+  <opensearch:totalResults>3</opensearch:totalResults>
+  <opensearch:startIndex>1</opensearch:startIndex>
+  <opensearch:itemsPerPage>2</opensearch:itemsPerPage>
+  <atom:entry>
+    <atom:id>https://arxiv.org/abs/2608.05678v1</atom:id>
+    <atom:updated>2026-08-02T10:00:00Z</atom:updated>
+    <atom:published>2026-08-02T09:00:00Z</atom:published>
+    <atom:title>Local Search Without Embeddings</atom:title>
+    <atom:summary>A bounded SQLite retrieval study.</atom:summary>
+    <atom:author><atom:name>Carol Scientist</atom:name></atom:author>
+    <arxiv:primary_category term="cs.IR" />
+    <atom:category term="cs.IR" />
+    <atom:category term="cs.DB" />
+    <atom:link href="https://arxiv.org/abs/2608.05678v1" rel="alternate" type="text/html" />
+  </atom:entry>
+  <atom:entry>
+    <atom:id>https://arxiv.org/abs/2608.09999v1</atom:id>
+    <atom:updated>2026-08-03T08:00:00Z</atom:updated>
+    <atom:published>2026-08-03T07:45:00Z</atom:published>
+    <atom:title>Atomic Scientific Catalogues</atom:title>
+    <atom:summary>Versioned observations under local transactions.</atom:summary>
+    <atom:author><atom:name>Dan Cataloguer</atom:name></atom:author>
+    <arxiv:primary_category term="cs.DB" />
+    <atom:category term="cs.DB" />
+    <atom:link href="https://arxiv.org/abs/2608.09999v1" rel="alternate" type="text/html" />
+  </atom:entry>
+</atom:feed>

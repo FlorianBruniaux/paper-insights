@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"
+      xmlns:arxiv="http://arxiv.org/schemas/atom"
+      xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/">
+  <opensearch:totalResults>1</opensearch:totalResults>
+  <opensearch:startIndex>0</opensearch:startIndex>
+  <opensearch:itemsPerPage>1</opensearch:itemsPerPage>
+  <entry>
+    <id>https://arxiv.org/abs/2608.01234v2</id>
+    <updated>2026-08-20T09:00:00Z</updated>
+    <published>2026-08-01T12:00:00Z</published>
+    <title>Reliable Paper Agents, Revised</title>
+    <summary>Evidence-backed scientific workflows with stronger provenance.</summary>
+    <author><name>Alice Example</name></author>
+    <author><name>Bob Researcher</name></author>
+    <arxiv:primary_category term="cs.AI" />
+    <category term="cs.AI" />
+    <category term="cs.LG" />
+    <arxiv:doi>10.1234/example.1</arxiv:doi>
+    <link href="https://arxiv.org/abs/2608.01234v2" rel="alternate" type="text/html" />
+  </entry>
+</feed>
