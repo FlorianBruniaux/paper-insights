@@ -1,0 +1,112 @@
+tests/domain/test_boundary_dtos.py
+  s_2f2b8a177ba283::t_05904e2f0d1da8 42,51,85-89
+  s_2f2b8a177ba283::t_f3394341b29434 273-276
+  s_2f2b8a177ba283::t_683915fceb60d1 35,249-252,281-289
+  s_2f2b8a177ba283::t_2bafe0f5941593 48-50,56-57,290-334,341
+  s_2f2b8a177ba283::t_b3ca4800be0153 44,253-271,277-278
+  s_2f2b8a177ba283::t_b726aabd39e81b 43,54,237-248
+  s_2f2b8a177ba283::t_14719cf4420dcf 279-280
+  s_2f2b8a177ba283::t_4d876b503d608b 18,119-125,342
+  s_2f2b8a177ba283::t_caa3b3d69a0913 45,272
+  s_2f2b8a177ba283::t_184e8e954d24ae 47
+  s_2f2b8a177ba283::t_3bc1ef5b864e00 340
+  s_2f2b8a177ba283::t_d20cc54cf03370 90
+  s_2f2b8a177ba283::t_80693cb83d9750 335-336
+CHANGELOG.md
+  s_2f2b8a177ba283::t_d803114911652f 37
+  s_2f2b8a177ba283::t_26a820c1884c5c 42
+  s_2f2b8a177ba283::t_0efe0fb1ab4f0d 35,38
+  s_2f2b8a177ba283::t_cebce8710ceb70 41
+  s_2f2b8a177ba283::t_7ad8a3c72e80e2 39-40
+  s_2f2b8a177ba283::t_59c339c50d76b9 43
+  s_2f2b8a177ba283::t_5d94d206732525 36
+src/paper_insights/domain/corpus.py
+  s_2f2b8a177ba283::t_14719cf4420dcf 373-374
+  s_2f2b8a177ba283::t_32159b75ba8af7 7,47,52
+  s_2f2b8a177ba283::t_ed7dc862eaeed6 16,57-61,328-329,332-335,347
+  s_2f2b8a177ba283::t_4082295ea0d2c0 53-56,274-303,392-409
+  s_2f2b8a177ba283::t_2563513c55e5bc 242-251,256,259,262-273,324-327
+  s_2f2b8a177ba283::t_152250a4eb8737 48,50-51,312-323,330
+  s_2f2b8a177ba283::t_26a820c1884c5c 365-368,375-383
+  s_2f2b8a177ba283::t_b7c0646217c19a 49,62-64,331,336-346,348-358,362
+  s_2f2b8a177ba283::t_5a607a512a7ff9 410-411
+src/paper_insights/domain/errors.py
+  s_2f2b8a177ba283::t_ed7dc862eaeed6 33-44,46-47
+  s_2f2b8a177ba283::t_4082295ea0d2c0 3,5,32,45
+  s_2f2b8a177ba283::t_2563513c55e5bc 9,49
+docs/superpowers/plans/2026-08-28-complete-program-execution.md
+  s_2f2b8a177ba283::t_7ad8a3c72e80e2 344
+  s_2f2b8a177ba283::t_af80c98a55c284 343
+  s_2f2b8a177ba283::t_d803114911652f 334,457
+  s_2f2b8a177ba283::t_59c339c50d76b9 374
+src/paper_insights/domain/acquisition.py
+  s_2f2b8a177ba283::t_32159b75ba8af7 7,128
+  s_2f2b8a177ba283::t_14719cf4420dcf 129-132,137,142-143
+  s_2f2b8a177ba283::t_4082295ea0d2c0 10,17-27,230-231,252-254
+  s_2f2b8a177ba283::t_ed7dc862eaeed6 228-229,237-239
+  s_2f2b8a177ba283::t_759e792bfda0ea 240
+tests/domain/test_run_counters.py
+  s_2f2b8a177ba283::t_f3394341b29434 8,13-19,65-68
+docs/specs/INGESTION.md
+  s_2f2b8a177ba283::t_d803114911652f 92,143
+  s_2f2b8a177ba283::t_7ad8a3c72e80e2 176
+  s_2f2b8a177ba283::t_59c339c50d76b9 96-97
+  s_2f2b8a177ba283::t_cafecdef9bbcf0 144
+  s_2f2b8a177ba283::t_0efe0fb1ab4f0d 198
+  s_2f2b8a177ba283::t_8f402dbc929c18 210
+docs/specs/DATA-MODEL.md
+  s_2f2b8a177ba283::t_59c339c50d76b9 210-211
+  s_2f2b8a177ba283::t_cebce8710ceb70 154-156,167
+  s_2f2b8a177ba283::t_0efe0fb1ab4f0d 77
+  s_2f2b8a177ba283::t_d803114911652f 94-102,104,106-117,119
+  s_2f2b8a177ba283::t_7ad8a3c72e80e2 103,105,118,264,282
+  s_2f2b8a177ba283::t_af80c98a55c284 75
+  s_2f2b8a177ba283::t_154b5cec6e2967 76
+src/paper_insights/application/ports/catalog.py
+  s_2f2b8a177ba283::t_152250a4eb8737 21,40
+  s_2f2b8a177ba283::t_4082295ea0d2c0 3,17-18,42-45,100-102
+  s_2f2b8a177ba283::t_26a820c1884c5c 25
+  s_787e22a0128d74::t_1db034642c56f1 41,103
+tests/domain/test_error_codes.py
+  s_2f2b8a177ba283::t_2bafe0f5941593 3-4,18,20-21
+  s_2f2b8a177ba283::t_683915fceb60d1 19
+  s_2f2b8a177ba283::t_3bc1ef5b864e00 5-10,17
+tests/domain/test_contract_shapes.py
+  s_2f2b8a177ba283::t_41bc9f85f443e6 256
+  s_2f2b8a177ba283::t_2bafe0f5941593 247,270,306-308,355-356
+  s_2f2b8a177ba283::t_b726aabd39e81b 265-269,271,349-351,357
+tests/domain/test_preview_digest.py
+  s_2f2b8a177ba283::t_3bc1ef5b864e00 166
+  s_2f2b8a177ba283::t_2bafe0f5941593 113-138
+  s_2f2b8a177ba283::t_994384b29d880d 139-140
+docs/specs/PORTS.md
+  s_2f2b8a177ba283::t_7ad8a3c72e80e2 60,79
+  s_2f2b8a177ba283::t_26a820c1884c5c 213
+  s_2f2b8a177ba283::t_cafecdef9bbcf0 59
+  s_2f2b8a177ba283::t_af80c98a55c284 93
+  s_2f2b8a177ba283::t_59c339c50d76b9 211
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "443130c0d9ad66e62e66fbc08456ecec73496bd2",
+  "prompts": {},
+  "sessions": {
+    "s_2f2b8a177ba283": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a04a7c-f938-7500-b20e-0faa6c4019c5",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Florian BRUNIAUX <florian@bruniaux.com>"
+    },
+    "s_787e22a0128d74": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a048f1-6c01-74b0-957c-5613dbb569d7",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Florian BRUNIAUX <florian@bruniaux.com>"
+    }
+  }
+}
