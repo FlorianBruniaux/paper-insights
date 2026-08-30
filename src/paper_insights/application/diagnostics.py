@@ -88,15 +88,9 @@ class DoctorService:
                 orphaned_blob_count=None,
             )
 
-        for ref in catalog.referenced_blobs:
-            try:
-                inspection = self._blobs.inspect(ref)
-            except DiagnosticUnavailableError:
-                return self._unknown_blob_report(catalog, "referenced_blob_unavailable")
-            if not inspection.exists:
-                return self._invalid_blob_report(catalog, "referenced_blob_missing")
-            if not inspection.valid:
-                return self._invalid_blob_report(catalog, "referenced_blob_corrupt")
+        referenced_failure = self._check_referenced_blobs(catalog)
+        if referenced_failure is not None:
+            return referenced_failure
 
         referenced = frozenset(ref.sha256 for ref in catalog.referenced_blobs)
         try:
@@ -119,12 +113,27 @@ class DoctorService:
                 ),
                 orphaned_blob_count=None,
             )
+        referenced_failure = self._check_referenced_blobs(catalog)
+        if referenced_failure is not None:
+            return referenced_failure
         code = "orphaned_blobs_found" if orphans else "no_orphaned_blobs"
         return DoctorReport(
             status="OK",
             checks=(*catalog.checks, DoctorCheck("orphaned_blobs", "OK", code)),
             orphaned_blob_count=len(orphans),
         )
+
+    def _check_referenced_blobs(self, catalog: CatalogProbe) -> DoctorReport | None:
+        for ref in catalog.referenced_blobs:
+            try:
+                inspection = self._blobs.inspect(ref)
+            except DiagnosticUnavailableError:
+                return self._unknown_blob_report(catalog, "referenced_blob_unavailable")
+            if not inspection.exists:
+                return self._invalid_blob_report(catalog, "referenced_blob_missing")
+            if not inspection.valid:
+                return self._invalid_blob_report(catalog, "referenced_blob_corrupt")
+        return None
 
     @staticmethod
     def _invalid_blob_report(catalog: CatalogProbe, code: str) -> DoctorReport:

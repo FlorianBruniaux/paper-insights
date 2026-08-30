@@ -164,6 +164,16 @@ class FilesystemBlobStore:
                         referenced,
                         orphans,
                     )
+                    current = os.stat(
+                        entry.name,
+                        dir_fd=descriptor,
+                        follow_symlinks=False,
+                    )
+                    if not stat.S_ISDIR(current.st_mode) or (
+                        opened.st_dev,
+                        opened.st_ino,
+                    ) != (current.st_dev, current.st_ino):
+                        raise DiagnosticUnavailableError("blob directory binding changed")
                 finally:
                     os.close(child_descriptor)
                 continue

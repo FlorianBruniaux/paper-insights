@@ -403,3 +403,42 @@ def test_find_orphans_is_unknown_when_root_binding_changes_after_scan(
         store.find_orphans(frozenset())
 
     assert tuple(outside.iterdir()) == ()
+
+
+def test_find_orphans_is_unknown_when_child_binding_changes_after_recursion(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = FilesystemBlobStore(CorpusPaths.from_data_root(tmp_path / "corpus"))
+    orphan = store.put(BlobWrite(content=b"orphan", media_type="text/plain"))
+    child_name = str(orphan.sha256)[:2]
+    target = store.paths.blobs / child_name
+    moved = tmp_path / "moved-child"
+    replacement = tmp_path / "replacement-child"
+    replacement.mkdir()
+    real_scan = FilesystemBlobStore._scan_blob_directory
+    swapped_after_recursion = False
+
+    def swap_child_after_recursion(
+        cls: type[FilesystemBlobStore],
+        descriptor: int,
+        relative_directory: Path,
+        referenced: set[str],
+        orphans: list[Path],
+    ) -> None:
+        nonlocal swapped_after_recursion
+        real_scan(descriptor, relative_directory, referenced, orphans)
+        if relative_directory == Path("blobs") / child_name and not swapped_after_recursion:
+            target.rename(moved)
+            replacement.rename(target)
+            swapped_after_recursion = True
+
+    monkeypatch.setattr(
+        FilesystemBlobStore,
+        "_scan_blob_directory",
+        classmethod(swap_child_after_recursion),
+    )
+
+    with pytest.raises(DiagnosticUnavailableError):
+        store.find_orphans(frozenset())
+
+    assert swapped_after_recursion

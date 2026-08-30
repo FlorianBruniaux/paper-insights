@@ -13,6 +13,7 @@ from paper_insights.adapters.artifacts.filesystem.store import FilesystemBlobSto
 from paper_insights.adapters.diagnostics.sqlite import SqliteCatalogDiagnostics
 from paper_insights.bootstrap import main
 from paper_insights.domain.corpus import BlobWrite
+from paper_insights.domain.identifiers import Sha256
 from paper_insights.paths import CorpusPaths
 
 
@@ -448,6 +449,46 @@ def test_doctor_reports_unknown_when_orphan_scan_binding_changes(
         "status": "UNKNOWN",
     }
     assert tuple(outside.iterdir()) == ()
+
+
+def test_doctor_rechecks_referenced_blobs_after_orphan_scan(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    paths = CorpusPaths.from_data_root(tmp_path / "corpus")
+    store = FilesystemBlobStore(paths)
+    ref = store.put(BlobWrite(content=b"referenced", media_type="text/plain"))
+    _create_catalog(
+        paths,
+        ((str(ref.sha256), ref.size_bytes, ref.media_type, ref.relative_path.as_posix()),),
+    )
+    target = paths.confined(ref.relative_path)
+    real_find_orphans = FilesystemBlobStore.find_orphans
+
+    def corrupt_after_scan(
+        blob_store: FilesystemBlobStore, referenced: frozenset[Sha256]
+    ) -> tuple[Path, ...]:
+        result = real_find_orphans(blob_store, referenced)
+        target.write_bytes(b"corrupt after scan")
+        return result
+
+    monkeypatch.setattr(FilesystemBlobStore, "find_orphans", corrupt_after_scan)
+    stdout = io.StringIO()
+
+    exit_code = main(
+        ["doctor", "--json"],
+        environ={"PAPER_INSIGHTS_DATA_ROOT": str(paths.data_root)},
+        stdout=stdout,
+        stderr=io.StringIO(),
+    )
+
+    payload = json.loads(stdout.getvalue())
+    assert exit_code == 6
+    assert payload["data"]["status"] == "INVALID"
+    assert payload["data"]["checks"][-1] == {
+        "code": "referenced_blob_corrupt",
+        "name": "referenced_blobs",
+        "status": "INVALID",
+    }
 
 
 def test_doctor_reports_unknown_when_catalog_binding_changes_before_open(
