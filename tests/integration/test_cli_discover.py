@@ -14,7 +14,7 @@ from paper_insights.application.ingestion.prepare import PrepareDiscovery
 from paper_insights.domain.acquisition import DiscoveryBatch, DiscoveryPage, DiscoveryQuery
 from paper_insights.domain.errors import ErrorCode
 from paper_insights.domain.identifiers import Sha256, SourceId
-from paper_insights.interfaces.cli.app import IngestionServices, run
+from paper_insights.interfaces.cli.app import run
 
 FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "arxiv" / "page-1.xml"
 NOW = datetime(2026, 8, 30, 10, 0, tzinfo=UTC)
@@ -77,11 +77,8 @@ def _run(
         discover_service_factory=lambda _settings, source: nullcontext(
             runtime.discovery[source]  # type: ignore[attr-defined]
         ),
-        ingestion_service_factory=lambda _settings, source: nullcontext(
-            IngestionServices(
-                prepare=runtime.discovery[source],  # type: ignore[attr-defined]
-                execute=runtime.ingestion,  # type: ignore[attr-defined]
-            )
+        ingestion_service_factory=lambda _settings: nullcontext(
+            runtime.ingestion  # type: ignore[attr-defined]
         ),
         environ={"PAPER_INSIGHTS_DATA_ROOT": str(data_root)},
         stdout=stdout,
@@ -124,6 +121,19 @@ def test_discover_json_is_versioned_and_makes_zero_corpus_mutation(tmp_path: Pat
         "2608.01234v1",
         "2608.05678v1",
     ]
+    first_record = payload["data"]["records"][0]  # type: ignore[index]
+    assert first_record["abstract"] == "Evidence-backed scientific workflows."
+    assert [author["raw_name"] for author in first_record["authors"]] == [
+        "Alice Example",
+        "Bob Researcher",
+    ]
+    assert [category["value"] for category in first_record["categories"]] == [
+        "cs.AI",
+        "cs.LG",
+    ]
+    assert first_record["identifiers"] == [
+        {"scheme": "doi", "canonical_value": "10.1234/example.1", "scope": "paper"}
+    ]
     assert provider.calls == [DiscoveryQuery(text="paper agents", categories=("cs.AI",), limit=2)]
     assert not data_root.exists()
 
@@ -153,19 +163,100 @@ def test_ingest_without_yes_returns_three_after_preview_and_never_executes(
     assert not data_root.exists()
 
 
-def test_discover_rejects_date_without_complete_utc_rfc3339(tmp_path: Path) -> None:
+def test_discover_accepts_documented_iso_dates_as_inclusive_utc_bounds(tmp_path: Path) -> None:
     provider = _FixtureProvider()
     prepare = PrepareDiscovery(provider=provider, clock=_Clock())
 
-    code, payload, errors = _run(
-        ["discover", "arxiv", "agents", "--from", "2026-08-01", "--json"],
+    code, _payload, errors = _run(
+        [
+            "discover",
+            "arxiv",
+            "agents",
+            "--from",
+            "2026-08-01",
+            "--to",
+            "2026-08-02",
+            "--json",
+        ],
         runtime=SimpleNamespace(discovery={"arxiv": prepare}),
         data_root=tmp_path / "absent-corpus",
     )
 
-    assert code == 2
-    assert payload == {}
-    assert json.loads(errors)["error"]["code"] == "invalid_request"
+    assert code == 0
+    assert errors == ""
+    assert provider.calls == [
+        DiscoveryQuery(
+            text="agents",
+            date_from=datetime(2026, 8, 1, tzinfo=UTC),
+            date_to=datetime(2026, 8, 2, 23, 59, 59, 999999, tzinfo=UTC),
+            limit=20,
+        )
+    ]
+
+
+def test_ingest_tty_confirmation_reuses_the_prepared_discovery(tmp_path: Path) -> None:
+    provider = _FixtureProvider()
+    prepare = PrepareDiscovery(provider=provider, clock=_Clock())
+    executed: list[object] = []
+
+    class Ingestion:
+        def execute(self, prepared: object, *, confirmation: object) -> object:
+            executed.append((prepared, confirmation))
+            raise ArxivProviderError(ErrorCode.CATALOG_CONFLICT, "stop after identity proof")
+
+    class TtyInput(io.StringIO):
+        def isatty(self) -> bool:
+            return True
+
+    stdout = io.StringIO()
+    stderr = io.StringIO()
+    code = run(
+        ["ingest", "arxiv", "agents", "--limit", "1"],
+        doctor_service_factory=lambda _settings: (_ for _ in ()).throw(
+            AssertionError("ingest called doctor")
+        ),
+        discover_service_factory=lambda _settings, _source: nullcontext(prepare),
+        ingestion_service_factory=lambda _settings: nullcontext(
+            Ingestion()  # type: ignore[arg-type]
+        ),
+        environ={"PAPER_INSIGHTS_DATA_ROOT": str(tmp_path)},
+        stdin=TtyInput("yes\n"),
+        stdout=stdout,
+        stderr=stderr,
+    )
+
+    assert code == 6
+    assert stdout.getvalue().startswith("arxiv: 1/2 selected\ndigest: ")
+    assert stderr.getvalue().startswith("Confirm ingestion [y/N]: ")
+    assert len(executed) == 1
+    prepared, confirmation = executed[0]  # type: ignore[misc]
+    assert confirmation == prepared.digest  # type: ignore[attr-defined]
+    assert provider.calls == [DiscoveryQuery(text="agents", limit=1)]
+
+
+def test_discover_keeps_complete_rfc3339_utc_boundaries(tmp_path: Path) -> None:
+    provider = _FixtureProvider()
+    prepare = PrepareDiscovery(provider=provider, clock=_Clock())
+
+    code, _payload, errors = _run(
+        [
+            "discover",
+            "arxiv",
+            "agents",
+            "--from",
+            "2026-08-01T12:34:56Z",
+            "--to",
+            "2026-08-02T01:02:03+00:00",
+            "--json",
+        ],
+        runtime=SimpleNamespace(discovery={"arxiv": prepare}),
+        data_root=tmp_path / "absent-corpus",
+    )
+
+    assert code == 0
+    assert errors == ""
+    assert provider.calls[0].date_from == datetime(2026, 8, 1, 12, 34, 56, tzinfo=UTC)
+    assert provider.calls[0].date_to == datetime(2026, 8, 2, 1, 2, 3, tzinfo=UTC)
 
 
 def test_discover_maps_provider_error_to_the_frozen_exit_code(tmp_path: Path) -> None:

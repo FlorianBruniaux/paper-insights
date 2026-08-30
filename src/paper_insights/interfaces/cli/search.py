@@ -10,7 +10,7 @@ from paper_insights.domain.retrieval import (
     PassageSearchResult,
     SearchFilters,
 )
-from paper_insights.interfaces.cli.discover import parse_utc_rfc3339
+from paper_insights.interfaces.cli.discover import parse_utc_date
 
 
 def paper_query(arguments: argparse.Namespace) -> PaperSearchQuery:
@@ -75,7 +75,7 @@ def _filters(arguments: argparse.Namespace) -> SearchFilters:
         category=arguments.category,
         author=arguments.author,
         language=arguments.language,
-        date_from=parse_utc_rfc3339(arguments.date_from),
-        date_to=parse_utc_rfc3339(arguments.date_to),
+        date_from=parse_utc_date(arguments.date_from),
+        date_to=parse_utc_date(arguments.date_to, inclusive_end=True),
         collection=arguments.collection,
     )

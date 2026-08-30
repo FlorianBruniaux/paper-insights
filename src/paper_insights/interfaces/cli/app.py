@@ -3,12 +3,14 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sqlite3
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import AbstractContextManager
-from dataclasses import dataclass
 from pathlib import Path
 from typing import TextIO
+
+from sqlalchemy.exc import SQLAlchemyError
 
 from paper_insights.application.diagnostics import DoctorService
 from paper_insights.application.ingestion.execute import ExecutePreparedIngestion
@@ -32,6 +34,7 @@ from paper_insights.interfaces.cli.collections import (
 )
 from paper_insights.interfaces.cli.discover import discovery_query, prepared_data, render_prepared
 from paper_insights.interfaces.cli.doctor import render_doctor
+from paper_insights.interfaces.cli.envelopes import CliEnvelope, CliErrorEnvelope
 from paper_insights.interfaces.cli.index import published_index_data
 from paper_insights.interfaces.cli.ingest import ingestion_data
 from paper_insights.interfaces.cli.repair import preview_data, repair_results_data
@@ -43,23 +46,18 @@ from paper_insights.interfaces.cli.search import (
 )
 
 
-@dataclass(frozen=True, slots=True)
-class IngestionServices:
-    prepare: PrepareDiscovery
-    execute: ExecutePreparedIngestion
-
-
 class CorpusUnavailableError(RuntimeError):
     pass
 
 
 DiscoverFactory = Callable[[Settings, str], AbstractContextManager[PrepareDiscovery]]
-IngestionFactory = Callable[[Settings, str], AbstractContextManager[IngestionServices]]
+IngestionFactory = Callable[[Settings], AbstractContextManager[ExecutePreparedIngestion]]
 CollectionsFactory = Callable[[Settings], AbstractContextManager[CollectionService]]
 SearchFactory = Callable[[Settings], AbstractContextManager[LocalSearch]]
 IndexFactory = Callable[[Settings], AbstractContextManager[RebuildSearchIndex]]
 CitationFactory = Callable[[Settings], AbstractContextManager[CitationService]]
 RepairFactory = Callable[[Settings, int], AbstractContextManager[RepairInterruptedRuns]]
+DEFAULT_REPAIR_STALE_AFTER_SECONDS = 86_400
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -121,7 +119,11 @@ def _parser() -> argparse.ArgumentParser:
     repair = subcommands.add_parser("repair")
     repair_commands = repair.add_subparsers(dest="repair_command", required=True)
     interrupted = repair_commands.add_parser("interrupted-runs")
-    interrupted.add_argument("--stale-after-seconds", type=int, required=True)
+    interrupted.add_argument(
+        "--stale-after-seconds",
+        type=int,
+        default=DEFAULT_REPAIR_STALE_AFTER_SECONDS,
+    )
     interrupted.add_argument("--yes", action="store_true", dest="confirmed")
     _add_json_flag(interrupted)
     return parser
@@ -156,11 +158,13 @@ def run(
     citation_service_factory: CitationFactory | None = None,
     repair_service_factory: RepairFactory | None = None,
     environ: Mapping[str, str] | None = None,
+    stdin: TextIO | None = None,
     stdout: TextIO | None = None,
     stderr: TextIO | None = None,
 ) -> int:
     output = sys.stdout if stdout is None else stdout
     error_output = sys.stderr if stderr is None else stderr
+    input_stream = sys.stdin if stdin is None else stdin
     arguments = _parser().parse_args(argv)
     try:
         settings = Settings.load(
@@ -194,20 +198,31 @@ def run(
                 )
                 return int(ExitCode.SUCCESS)
         if arguments.command == "ingest":
+            if discover_service_factory is None:
+                return _runtime_unavailable(error_output)
+            with discover_service_factory(settings, arguments.source) as service:
+                prepared = service.prepare(discovery_query(arguments))
+            confirmed = arguments.confirmed
+            if not confirmed:
+                _write_result(
+                    output,
+                    operation="ingest",
+                    data=prepared_data(prepared),
+                    as_json=arguments.as_json,
+                    human=render_prepared(prepared, as_json=False),
+                )
+                if not input_stream.isatty():
+                    return int(ExitCode.CONFIRMATION_REQUIRED)
+                output.flush()
+                error_output.write("Confirm ingestion [y/N]: ")
+                error_output.flush()
+                confirmed = input_stream.readline().strip().lower() in {"y", "yes"}
+                if not confirmed:
+                    return int(ExitCode.CONFIRMATION_REQUIRED)
             if ingestion_service_factory is None:
                 return _runtime_unavailable(error_output)
-            with ingestion_service_factory(settings, arguments.source) as services:
-                prepared = services.prepare.prepare(discovery_query(arguments))
-                if not arguments.confirmed:
-                    _write_result(
-                        output,
-                        operation="ingest",
-                        data=prepared_data(prepared),
-                        as_json=arguments.as_json,
-                        human=render_prepared(prepared, as_json=False),
-                    )
-                    return int(ExitCode.CONFIRMATION_REQUIRED)
-                summary = services.execute.execute(prepared, confirmation=prepared.digest)
+            with ingestion_service_factory(settings) as service:
+                summary = service.execute(prepared, confirmation=prepared.digest)
                 _write_result(
                     output,
                     operation="ingest",
@@ -264,7 +279,9 @@ def run(
             if search_service_factory is None:
                 return _runtime_unavailable(error_output)
             limit = settings.search.default_limit if arguments.limit is None else arguments.limit
-            arguments.limit = min(limit, settings.search.maximum_limit)
+            if not 1 <= limit <= settings.search.maximum_limit:
+                raise ValueError("search limit is outside configured bounds")
+            arguments.limit = limit
             with search_service_factory(settings) as service:
                 if arguments.search_command == "papers":
                     paper_search = service.search_papers(paper_query(arguments))
@@ -348,7 +365,7 @@ def run(
                     human=f"repair: {len(results)} result(s)\n",
                 )
                 return int(ExitCode.SUCCESS)
-    except CorpusUnavailableError:
+    except (CorpusUnavailableError, SQLAlchemyError, sqlite3.DatabaseError):
         _write_error(error_output, "corpus_unavailable")
         return int(ExitCode.CORPUS_INVALID)
     except (LookupError, OSError, RuntimeError, ValueError) as exc:
@@ -376,7 +393,7 @@ def _write_result(
     if not as_json:
         output.write(human)
         return
-    envelope = {
+    envelope_data: dict[str, object] = {
         "schema_version": "paper-insights.cli.v1",
         "operation": operation,
         "data": data,
@@ -385,17 +402,20 @@ def _write_result(
         "truncated": truncated,
     }
     if returned is not None:
-        envelope["returned"] = returned
-        envelope["available"] = available
-    output.write(json.dumps(envelope, ensure_ascii=False, sort_keys=True) + "\n")
+        envelope_data["returned"] = returned
+        envelope_data["available"] = available
+    envelope = CliEnvelope.model_validate(envelope_data)
+    output.write(envelope.model_dump_json(exclude_none=True, by_alias=True) + "\n")
 
 
 def _write_error(output: TextIO, code: str) -> None:
-    payload = {
-        "error": {"code": code},
-        "schema_version": "paper-insights.error.v1",
-    }
-    output.write(json.dumps(payload, sort_keys=True) + "\n")
+    payload = CliErrorEnvelope.model_validate(
+        {
+            "error": {"code": code},
+            "schema_version": "paper-insights.error.v1",
+        }
+    )
+    output.write(payload.model_dump_json() + "\n")
 
 
 def _runtime_unavailable(output: TextIO) -> int:

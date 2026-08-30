@@ -12,8 +12,8 @@ def discovery_query(arguments: argparse.Namespace) -> DiscoveryQuery:
         categories=tuple(arguments.categories),
         authors=tuple(arguments.authors),
         identifiers=tuple(arguments.identifiers),
-        date_from=parse_utc_rfc3339(arguments.date_from),
-        date_to=parse_utc_rfc3339(arguments.date_to),
+        date_from=parse_utc_date(arguments.date_from),
+        date_to=parse_utc_date(arguments.date_to, inclusive_end=True),
         limit=arguments.limit,
         cursor=arguments.cursor,
     )
@@ -51,6 +51,28 @@ def prepared_data(prepared: PreparedDiscovery) -> dict[str, object]:
                 "source_item_id": record.source_item_id,
                 "source_version_key": record.source_version_key,
                 "title": record.title,
+                "abstract": record.abstract,
+                "authors": [
+                    {
+                        "raw_name": author.raw_name,
+                        "given_name": author.given_name,
+                        "family_name": author.family_name,
+                        "affiliation_raw": author.affiliation_raw,
+                    }
+                    for author in record.authors
+                ],
+                "categories": [
+                    {"value": category.value, "is_primary": category.is_primary}
+                    for category in record.categories
+                ],
+                "identifiers": [
+                    {
+                        "scheme": identifier.scheme,
+                        "canonical_value": identifier.canonical_value,
+                        "scope": identifier.scope.value,
+                    }
+                    for identifier in record.identifiers
+                ],
                 "page_ordinal": record.page_ordinal,
                 "record_ordinal": record.record_ordinal,
                 "source_url": record.source_url,
@@ -70,11 +92,14 @@ def render_prepared(prepared: PreparedDiscovery, *, as_json: bool) -> str:
     )
 
 
-def parse_utc_rfc3339(value: str | None) -> datetime | None:
+def parse_utc_date(value: str | None, *, inclusive_end: bool = False) -> datetime | None:
     if value is None:
         return None
     if "T" not in value:
-        raise ValueError("date filter requires complete RFC3339 UTC")
+        parsed_date = datetime.strptime(value, "%Y-%m-%d").date()
+        if inclusive_end:
+            return datetime.combine(parsed_date, datetime.max.time(), tzinfo=UTC)
+        return datetime.combine(parsed_date, datetime.min.time(), tzinfo=UTC)
     parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     if parsed.tzinfo is None or parsed.utcoffset() != UTC.utcoffset(parsed):
         raise ValueError("date filter requires UTC")

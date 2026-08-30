@@ -38,7 +38,7 @@ from paper_insights.application.research.collections import CollectionService
 from paper_insights.application.research.index import RebuildSearchIndex
 from paper_insights.application.research.search import LocalSearch
 from paper_insights.config import Settings
-from paper_insights.interfaces.cli.app import CorpusUnavailableError, IngestionServices, run
+from paper_insights.interfaces.cli.app import CorpusUnavailableError, run
 
 
 class SystemClock:
@@ -141,36 +141,21 @@ def _catalog_runtime(
 @contextmanager
 def ingestion_service(
     settings: Settings,
-    source: str,
     *,
-    transport: httpx.BaseTransport | None = None,
     clock: Clock | None = None,
     ids: IdGenerator | None = None,
-    new_capture_id: Callable[[], UUID] | None = None,
-) -> Iterator[IngestionServices]:
+) -> Iterator[ExecutePreparedIngestion]:
     engine, active_clock, active_ids, _reader, unit_of_work = _catalog_runtime(
         settings, clock=clock, ids=ids
     )
     try:
-        with httpx.Client(transport=transport) as client:
-            prepare = PrepareDiscovery(
-                provider=_provider(
-                    settings,
-                    source,
-                    client,
-                    clock=active_clock,
-                    new_capture_id=new_capture_id,
-                ),
-                clock=active_clock,
-            )
-            execute = ExecutePreparedIngestion(
-                blobs=FilesystemBlobStore(settings.paths),
-                catalog=unit_of_work,
-                clock=active_clock,
-                ids=active_ids,
-                metadata_payload=normalized_metadata_payload,
-            )
-            yield IngestionServices(prepare=prepare, execute=execute)
+        yield ExecutePreparedIngestion(
+            blobs=FilesystemBlobStore(settings.paths),
+            catalog=unit_of_work,
+            clock=active_clock,
+            ids=active_ids,
+            metadata_payload=normalized_metadata_payload,
+        )
     finally:
         engine.dispose()
 
@@ -245,6 +230,7 @@ def main(
     argv: Sequence[str] | None = None,
     *,
     environ: Mapping[str, str] | None = None,
+    stdin: TextIO | None = None,
     stdout: TextIO | None = None,
     stderr: TextIO | None = None,
 ) -> int:
@@ -259,6 +245,7 @@ def main(
         citation_service_factory=citation_service,
         repair_service_factory=repair_service,
         environ=environ,
+        stdin=stdin,
         stdout=stdout,
         stderr=stderr,
     )
