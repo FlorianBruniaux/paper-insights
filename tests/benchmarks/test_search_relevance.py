@@ -1,24 +1,17 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta
 from pathlib import Path
 from typing import cast
-from uuid import UUID
 
 import pytest
 
+from paper_insights.benchmarks.search_relevance import (
+    RelevanceRecordState,
+    parse_relevance_record,
+)
+
 DATASET = Path(__file__).with_name("search_queries.jsonl")
-EXPECTED_KEYS = {
-    "schema_version",
-    "slot",
-    "query",
-    "expected_relevant_paper_ids",
-    "observed_top_five_paper_ids",
-    "p0_relevance_failure",
-    "reviewer_id",
-    "reviewed_at",
-}
 PAPER_ID = "01890f3e-3b12-7cc0-98d6-4f6f94748f51"
 
 
@@ -27,98 +20,11 @@ def _records() -> tuple[dict[str, object], ...]:
 
 
 def _is_annotated(record: dict[str, object]) -> bool:
-    return all(
-        record[field] is not None
-        for field in (
-            "query",
-            "expected_relevant_paper_ids",
-            "observed_top_five_paper_ids",
-            "p0_relevance_failure",
-            "reviewer_id",
-            "reviewed_at",
-        )
-    )
-
-
-def _validate_uuid_list(
-    value: object,
-    *,
-    field: str,
-    require_non_empty: bool,
-    maximum: int | None = None,
-) -> tuple[str, ...]:
-    if type(value) is not list:
-        raise ValueError(f"{field} must be a JSON list")
-    values = cast(list[object], value)
-    if require_non_empty and not values:
-        raise ValueError(f"{field} cannot be empty")
-    if maximum is not None and len(values) > maximum:
-        raise ValueError(f"{field} exceeds its maximum length")
-    if any(type(item) is not str or not cast(str, item).strip() for item in values):
-        raise ValueError(f"{field} must contain non-empty strings")
-    strings = tuple(cast(str, item) for item in values)
-    if len(set(strings)) != len(strings):
-        raise ValueError(f"{field} cannot contain duplicate IDs")
-    for item in strings:
-        try:
-            parsed = UUID(item)
-        except ValueError as exc:
-            raise ValueError(f"{field} contains an invalid UUID") from exc
-        if parsed.version != 7 or str(parsed) != item:
-            raise ValueError(f"{field} requires canonical UUIDv7 paper IDs")
-    return strings
+    return parse_relevance_record(record).state is RelevanceRecordState.REVIEWED
 
 
 def _validate_record(record: dict[str, object]) -> bool:
-    if set(record) != EXPECTED_KEYS:
-        raise ValueError("human relevance record has unknown or missing fields")
-    if record["schema_version"] != "search-relevance-v1":
-        raise ValueError("human relevance record schema is unsupported")
-    slot = record["slot"]
-    if type(slot) is not int or not 1 <= cast(int, slot) <= 30:
-        raise ValueError("human relevance slot must be an integer from 1 to 30")
-    human_fields = (
-        "query",
-        "expected_relevant_paper_ids",
-        "observed_top_five_paper_ids",
-        "p0_relevance_failure",
-        "reviewer_id",
-        "reviewed_at",
-    )
-    supplied = tuple(record[field] is not None for field in human_fields)
-    if not any(supplied):
-        return False
-    if not all(supplied):
-        raise ValueError("human relevance annotation is partial")
-    query = record["query"]
-    if type(query) is not str or not cast(str, query).strip() or len(cast(str, query)) > 500:
-        raise ValueError("human relevance query must contain 1 to 500 characters")
-    _validate_uuid_list(
-        record["expected_relevant_paper_ids"],
-        field="expected_relevant_paper_ids",
-        require_non_empty=True,
-    )
-    _validate_uuid_list(
-        record["observed_top_five_paper_ids"],
-        field="observed_top_five_paper_ids",
-        require_non_empty=False,
-        maximum=5,
-    )
-    if type(record["p0_relevance_failure"]) is not bool:
-        raise ValueError("p0_relevance_failure must be a JSON boolean")
-    reviewer = record["reviewer_id"]
-    if type(reviewer) is not str or not cast(str, reviewer).strip():
-        raise ValueError("reviewer_id must be a non-empty string")
-    reviewed_at = record["reviewed_at"]
-    if type(reviewed_at) is not str or not cast(str, reviewed_at).strip():
-        raise ValueError("reviewed_at must be a non-empty UTC timestamp")
-    try:
-        parsed_at = datetime.fromisoformat(cast(str, reviewed_at))
-    except ValueError as exc:
-        raise ValueError("reviewed_at must be an ISO 8601 timestamp") from exc
-    if parsed_at.utcoffset() != timedelta(0):
-        raise ValueError("reviewed_at must use UTC")
-    return True
+    return parse_relevance_record(record).state is RelevanceRecordState.REVIEWED
 
 
 def _validate_dataset(records: tuple[dict[str, object], ...]) -> None:
@@ -179,6 +85,18 @@ def test_partial_human_annotation_is_rejected_instead_of_counted_as_pending() ->
 
     with pytest.raises(ValueError, match="partial"):
         _validate_record(record)
+
+
+def test_prepared_truth_and_machine_observations_do_not_count_as_human_review() -> None:
+    prepared = _complete_record()
+    prepared["observed_top_five_paper_ids"] = None
+    prepared["p0_relevance_failure"] = None
+    prepared["reviewer_id"] = None
+    prepared["reviewed_at"] = None
+    executed = prepared | {"observed_top_five_paper_ids": [PAPER_ID]}
+
+    assert _validate_record(prepared) is False
+    assert _validate_record(executed) is False
 
 
 def test_duplicate_dataset_slots_are_rejected() -> None:

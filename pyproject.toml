@@ -19,6 +19,7 @@ dependencies = [
 
 [project.scripts]
 paper-insights = "paper_insights.bootstrap:main"
+paper-insights-search-relevance = "paper_insights.benchmarks.search_relevance:main"
 
 [project.optional-dependencies]
 mcp = ["mcp>=1.0,<2"]

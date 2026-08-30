@@ -49,6 +49,7 @@ Cette vue simplifiée montre la direction des dépendances, pas un pipeline d'im
 | [Ingestion](docs/specs/INGESTION.md) | Découverte, reprise et idempotence |
 | [Ports d'application](docs/specs/PORTS.md) | Signatures synchrones et DTO gelés |
 | [Recherche et MCP](docs/specs/SEARCH-AND-MCP.md) | FTS5, citations et outils MCP |
+| [Revue humaine de pertinence](docs/benchmarks/SEARCH-RELEVANCE-GATE.md) | Protocole hors réseau du Gate 2 |
 | [Watchlists](docs/specs/WATCHLISTS.md) | Curseurs, overlap, finalisation et digests |
 | [Analyse](docs/specs/ANALYSIS.md) | Texte intégral, passages, cache, claims et preuves |
 | [Identité des auteurs](docs/specs/AUTHOR-IDENTITY.md) | Observations, décisions réversibles et LinkedIn manuel |

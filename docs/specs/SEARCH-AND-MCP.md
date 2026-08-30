@@ -77,7 +77,28 @@ Limites: 10 par défaut, 50 au maximum pour la CLI, 20 au maximum pour MCP.
 - `truncated`, `returned` et `available` nullable;
 - limites appliquées.
 
-Chaque hit contient rang et score BM25 brut. Aucun pourcentage de pertinence n'est inventé. Un benchmark annoté doit approuver un changement d'indexation avant publication.
+Chaque hit contient rang et score BM25 brut. Aucun pourcentage de pertinence n'est inventé. Un changement d'indexation ne peut être publié qu'après un benchmark annoté satisfaisant les seuils et une décision humaine distincte.
+
+## Contrat du benchmark humain de pertinence
+
+Le fichier `tests/benchmarks/search_queries.jsonl` conserve exactement 30 enregistrements `search-relevance-v1`. Chaque enregistrement suit un des quatre états fermés:
+
+- `blank`: tous les champs variables sont nuls;
+- `prepared`: `query` et `expected_relevant_paper_ids` sont remplis par un humain avant l'exécution;
+- `executed`: `observed_top_five_paper_ids` est ajouté par le harnais, sans verdict humain;
+- `reviewed`: `p0_relevance_failure`, `reviewer_id` et `reviewed_at` sont tous remplis.
+
+Une vérité attendue partielle, un résultat observé sans vérité préparée ou un sous-ensemble des trois champs de revue est invalide. Seul l'état `reviewed` compte pour le gate. Le harnais ne modifie pas le fichier de vérité préparée. Il écrit les observations dans un artefact distinct, puis génère une copie de revue et un formulaire Markdown avec les trois champs humains vides. Le schéma ne contient aucun champ d'approbation et le harnais n'en déduit pas.
+
+Le protocole exécutable est défini dans [Revue humaine de pertinence](../benchmarks/SEARCH-RELEVANCE-GATE.md). Il exige un catalogue et un index fournis explicitement, vérifie leur révision et leurs empreintes, puis lie chaque artefact à ces entrées. Le catalogue est l'autorité des documents et l'index reste une projection.
+
+Trois décisions produit restent ouvertes avant une exécution autoritaire du Gate 2:
+
+- les critères qui rendent les 30 requêtes représentatives;
+- la définition opérationnelle d'un P0 de pertinence;
+- l'instance précise du catalogue et de l'index qui constitue le corpus de référence du benchmark.
+
+Le seuil de 24 requêtes sur 30 et l'exigence de zéro P0 restent ceux de la roadmap. Une sortie automatisée `SATISFIED` indique seulement que ces deux calculs passent sur 30 revues complètes. Elle ne constitue pas une approbation produit.
 
 Un hit papier restitue aussi la source, les auteurs ordonnés et les identifiants canoniques du papier et de la version, avec leur scope explicite. Cette projection est incluse dans l'empreinte de l'index; la CLI n'effectue aucune seconde lecture implicite pour la reconstruire.
 

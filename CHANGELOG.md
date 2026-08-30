@@ -27,9 +27,11 @@ Toutes les modifications notables du projet sont consignées ici.
 - Collections applicatives et citations BibTeX, Markdown et CSL-JSON rendues depuis une observation et une provenance exactes, sans champ bibliographique inventé.
 - Index local FTS5 `fts-v2` auto-descriptif avec passages déterministes, publication sous garde de révision, lecture par descripteur en mode read-only et six filtres fermés.
 - CLI Gate 2 pour discovery, ingestion confirmée, recherche papier et passage, reconstruction d'index, citations BibTeX, Markdown et CSL-JSON, collections et réparation explicite, avec enveloppes JSON versionnées et fixtures arXiv hors ligne.
+- Harnais hors réseau du Gate 2 pour inventaire aveugle, exécution des 30 recherches, capture des cinq premiers `paper_id`, formulaire de revue et validation fermée des verdicts humains.
 
 ### Changed
 
+- Le contrat `search-relevance-v1` distingue désormais les états `blank`, `prepared`, `executed` et `reviewed`; seule une revue complète compte pour le Gate 2.
 - The arXiv adapter scopes DOI identifiers to the paper while retaining each DOI observation on its exact version, allowing multiple arXiv revisions to share the same DOI without a catalog conflict.
 - Paper search hits now carry their source, ordered authors and scoped canonical identifiers directly from the fingerprinted `fts-v2` projection.
 - Catalog connections now open only an existing database and reject file or symlink binding changes before applying writable SQLite pragmas.
