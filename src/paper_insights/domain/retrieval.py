@@ -123,6 +123,8 @@ class IndexDocument:
             raise ValueError("index document collection slugs cannot be blank")
         if len(set(self.collection_slugs)) != len(self.collection_slugs):
             raise ValueError("index document collection slugs must be unique")
+        if len(self.collection_ids) != len(self.collection_slugs):
+            raise ValueError("index document collection IDs and slugs must have equal cardinality")
 
 
 @dataclass(frozen=True, slots=True)

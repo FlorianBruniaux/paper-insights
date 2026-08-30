@@ -160,6 +160,13 @@ def test_index_document_carries_the_complete_filter_projection() -> None:
                 "submitted_at": datetime(2026, 8, 30, 12, 0),
             }
         )
+    with pytest.raises(ValueError, match="collection IDs and slugs"):
+        IndexDocument(
+            **{
+                **{field.name: getattr(document, field.name) for field in fields(document)},
+                "collection_slugs": (),
+            }
+        )
 
 
 def test_search_rejects_blank_query_excess_hits_and_bad_rank_order() -> None:
