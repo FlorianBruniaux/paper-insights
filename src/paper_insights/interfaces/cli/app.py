@@ -40,6 +40,7 @@ from paper_insights.interfaces.cli.search import (
     paper_result_data,
     passage_query,
     passage_result_data,
+    render_paper_result,
 )
 
 
@@ -287,6 +288,7 @@ def run(
                     truncated = paper_search.truncated
                     returned = paper_search.returned
                     available = paper_search.available
+                    human_search = render_paper_result(paper_search)
                 else:
                     passage_search = service.search_passages(passage_query(arguments))
                     search_payload = passage_result_data(passage_search)
@@ -294,12 +296,13 @@ def run(
                     truncated = passage_search.truncated
                     returned = passage_search.returned
                     available = passage_search.available
+                    human_search = f"search.{arguments.search_command}: {returned} result(s)\n"
                 _write_result(
                     output,
                     operation=f"search.{arguments.search_command}",
                     data=search_payload,
                     as_json=arguments.as_json,
-                    human=f"search.{arguments.search_command}: {returned} result(s)\n",
+                    human=human_search,
                     coverage=coverage,
                     truncated=truncated,
                     returned=returned,

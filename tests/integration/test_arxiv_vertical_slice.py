@@ -286,7 +286,13 @@ def test_offline_arxiv_cli_preserves_versions_and_provenance(tmp_path: Path) -> 
             stderr=stderr,
         )
         rendered = stdout.getvalue()
-        return code, json.loads(rendered) if rendered else {}, stderr.getvalue()
+        if not rendered:
+            payload: dict[str, object] = {}
+        elif rendered.startswith("{"):
+            payload = json.loads(rendered)
+        else:
+            payload = {"text": rendered}
+        return code, payload, stderr.getvalue()
 
     first_code, first, first_error = invoke(
         ["ingest", "arxiv", "agents", "--limit", "2", "--yes", "--json"]
@@ -331,7 +337,26 @@ def test_offline_arxiv_cli_preserves_versions_and_provenance(tmp_path: Path) -> 
     assert published["data"]["catalog_revision"] > 0  # type: ignore[index]
     assert searched["coverage"]["status"] == "complete"  # type: ignore[index]
     assert searched["data"]["hits"][0]["title"] == "Reliable Paper Agents, Revised"  # type: ignore[index]
+    assert searched["data"]["hits"][0]["source_id"] == "arxiv"  # type: ignore[index]
+    assert searched["data"]["hits"][0]["authors"] == [  # type: ignore[index]
+        "Alice Example",
+        "Bob Researcher",
+    ]
+    assert searched["data"]["hits"][0]["identifiers"] == [  # type: ignore[index]
+        {"scheme": "arxiv", "canonical_value": "2608.01234", "scope": "paper"},
+        {"scheme": "doi", "canonical_value": "10.1234/example.1", "scope": "paper"},
+        {"scheme": "arxiv", "canonical_value": "2608.01234v2", "scope": "version"},
+    ]
     assert listed["data"]["collections"][0]["paper_count"] == 1  # type: ignore[index]
+
+    terminal_code, terminal_search, terminal_error = invoke(
+        ["search", "papers", "Revised", "--limit", "5"]
+    )
+    assert terminal_code == 0
+    assert terminal_error == ""
+    assert "source=arxiv" in terminal_search["text"]  # type: ignore[operator]
+    assert "authors=[Alice Example, Bob Researcher]" in terminal_search["text"]  # type: ignore[operator]
+    assert "doi:10.1234/example.1 [paper]" in terminal_search["text"]  # type: ignore[operator]
 
     with sqlite3.connect(data_root / "catalog.sqlite3") as connection:
         paper_count = connection.execute("SELECT count(*) FROM papers").fetchone()[0]

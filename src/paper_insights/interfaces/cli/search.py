@@ -42,10 +42,34 @@ def paper_result_data(result: PaperSearchResult) -> dict[str, object]:
                 "rank": hit.rank,
                 "bm25_score": hit.bm25_score,
                 "artifact_sha256": str(hit.artifact_sha256),
+                "source_id": str(hit.source_id),
+                "authors": list(hit.authors),
+                "identifiers": [
+                    {
+                        "scheme": identifier.scheme,
+                        "canonical_value": identifier.canonical_value,
+                        "scope": identifier.scope.value,
+                    }
+                    for identifier in hit.identifiers
+                ],
             }
             for hit in result.hits
         ],
     }
+
+
+def render_paper_result(result: PaperSearchResult) -> str:
+    lines: list[str] = []
+    for hit in result.hits:
+        authors = ", ".join(hit.authors)
+        identifiers = ", ".join(
+            f"{item.scheme}:{item.canonical_value} [{item.scope.value}]" for item in hit.identifiers
+        )
+        lines.append(
+            f"{hit.rank}. {hit.title} | source={hit.source_id} | "
+            f"authors=[{authors}] | identifiers=[{identifiers}]"
+        )
+    return "\n".join(lines) + ("\n" if lines else "")
 
 
 def passage_result_data(result: PassageSearchResult) -> dict[str, object]:
