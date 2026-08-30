@@ -1,0 +1,44 @@
+docs/specs/PRODUCT.md
+  s_2f2b8a177ba283::t_f8ba34206b2454 155
+  s_2f2b8a177ba283::t_25c0597f9f6eab 54-55,101
+  s_add58b6f2c831b::t_59ffb972b0fb8b 102
+CHANGELOG.md
+  s_2f2b8a177ba283::t_f8ba34206b2454 37-38
+  s_2f2b8a177ba283::t_25c0597f9f6eab 29,36
+tests/catalog/test_snapshot.py
+  s_2f2b8a177ba283::t_c63918043acc04 548
+  s_2f2b8a177ba283::t_e202ca148a4b6e 537-547,549-553
+src/paper_insights/domain/errors.py
+  s_2f2b8a177ba283::t_f8ba34206b2454 28
+docs/ARCHITECTURE.md
+  s_2f2b8a177ba283::t_f8ba34206b2454 101
+  s_2f2b8a177ba283::t_25c0597f9f6eab 127,129-131
+src/paper_insights/adapters/catalog/sqlite/readers.py
+  s_2f2b8a177ba283::t_2be29dfbc9739b 57-61,63-75,77-82,84-89,96-97
+  s_2f2b8a177ba283::t_1063f842ae407b 3-5,107,113-122,124-125,130,140,144,165-167
+  s_2f2b8a177ba283::t_361ab20da467a9 15,62,76,83,90-95
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "8cfc75eac71fdf6d0033d5333a890f6cb8496eb0",
+  "prompts": {},
+  "sessions": {
+    "s_2f2b8a177ba283": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a04a7c-f938-7500-b20e-0faa6c4019c5",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Florian BRUNIAUX <florian@bruniaux.com>"
+    },
+    "s_add58b6f2c831b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a04c84-8125-7153-bf35-92eab4d81a08",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Florian BRUNIAUX <florian@bruniaux.com>"
+    }
+  }
+}
