@@ -10,13 +10,16 @@ from pathlib import Path
 from uuid import UUID
 
 import httpx
+import pytest
 from alembic.config import Config
+from pydantic import ValidationError
 
 from alembic import command
 from paper_insights.application.ingestion.repair import InterruptedRunsPreview
 from paper_insights.bootstrap import (
     citation_service,
     collections_service,
+    discover_service,
     index_service,
     ingestion_service,
     main,
@@ -24,6 +27,7 @@ from paper_insights.bootstrap import (
     search_service,
 )
 from paper_insights.interfaces.cli.app import run
+from paper_insights.interfaces.cli.envelopes import CliEnvelope
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = ROOT / "tests" / "fixtures" / "arxiv"
@@ -88,15 +92,13 @@ def test_repair_requires_confirmation_after_read_only_preview(tmp_path: Path) ->
         [
             "repair",
             "interrupted-runs",
-            "--stale-after-seconds",
-            "3600",
             "--json",
         ],
         doctor_service_factory=lambda _settings: (_ for _ in ()).throw(
             AssertionError("repair called doctor")
         ),
         repair_service_factory=lambda _settings, age: nullcontext(
-            _PreviewOnlyRepair() if age == 3600 else None  # type: ignore[arg-type]
+            _PreviewOnlyRepair() if age == 86_400 else None  # type: ignore[arg-type]
         ),
         environ={"PAPER_INSIGHTS_DATA_ROOT": str(tmp_path / "absent")},
         stdout=stdout,
@@ -106,6 +108,118 @@ def test_repair_requires_confirmation_after_read_only_preview(tmp_path: Path) ->
     assert code == 3
     assert stderr.getvalue() == ""
     assert json.loads(stdout.getvalue())["data"]["candidates"] == []
+
+
+def test_ingest_preview_needs_no_catalog_and_creates_nothing(tmp_path: Path) -> None:
+    data_root = tmp_path / "absent"
+    stdout = io.StringIO()
+    stderr = io.StringIO()
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(
+            200,
+            content=(FIXTURES / "revision-v2.xml").read_bytes(),
+            request=request,
+        )
+    )
+
+    code = run(
+        ["ingest", "arxiv", "--identifier", "2608.01234", "--limit", "1", "--json"],
+        doctor_service_factory=lambda _settings: (_ for _ in ()).throw(
+            AssertionError("preview called doctor")
+        ),
+        discover_service_factory=lambda settings, source: discover_service(
+            settings,
+            source,
+            transport=transport,
+            clock=_Clock(),
+            new_capture_id=lambda: UUID("01890f3e-3b12-7cc0-98d6-4f6f94748f5c"),
+        ),
+        ingestion_service_factory=lambda _settings: (_ for _ in ()).throw(
+            AssertionError("unconfirmed preview opened catalog runtime")
+        ),
+        environ={"PAPER_INSIGHTS_DATA_ROOT": str(data_root)},
+        stdin=io.StringIO(),
+        stdout=stdout,
+        stderr=stderr,
+    )
+
+    assert code == 3
+    assert stderr.getvalue() == ""
+    assert json.loads(stdout.getvalue())["data"]["preview"]["selected_records"] == 1
+    assert not data_root.exists()
+
+
+def test_catalog_and_index_database_errors_are_closed(tmp_path: Path) -> None:
+    empty_root = tmp_path / "empty"
+    empty_root.mkdir()
+    (empty_root / "catalog.sqlite3").touch()
+    empty_stdout = io.StringIO()
+    empty_stderr = io.StringIO()
+
+    empty_code = main(
+        ["collections", "list", "--json"],
+        environ={"PAPER_INSIGHTS_DATA_ROOT": str(empty_root)},
+        stdout=empty_stdout,
+        stderr=empty_stderr,
+    )
+
+    corrupt_root = tmp_path / "corrupt"
+    corrupt_root.mkdir()
+    _migrate(corrupt_root / "catalog.sqlite3")
+    (corrupt_root / ".search").mkdir()
+    (corrupt_root / ".search" / "search-v1.sqlite3").write_bytes(b"not sqlite")
+    corrupt_stdout = io.StringIO()
+    corrupt_stderr = io.StringIO()
+    corrupt_code = main(
+        ["search", "papers", "agents", "--json"],
+        environ={"PAPER_INSIGHTS_DATA_ROOT": str(corrupt_root)},
+        stdout=corrupt_stdout,
+        stderr=corrupt_stderr,
+    )
+
+    assert (empty_code, corrupt_code) == (6, 6)
+    assert empty_stdout.getvalue() == corrupt_stdout.getvalue() == ""
+    assert json.loads(empty_stderr.getvalue())["error"]["code"] == "corpus_unavailable"
+    assert json.loads(corrupt_stderr.getvalue())["error"]["code"] == "corpus_unavailable"
+
+
+@pytest.mark.parametrize("limit", (0, 51))
+def test_search_rejects_out_of_range_limit_before_factory(tmp_path: Path, limit: int) -> None:
+    stdout = io.StringIO()
+    stderr = io.StringIO()
+    code = run(
+        ["search", "papers", "agents", "--limit", str(limit), "--json"],
+        doctor_service_factory=lambda _settings: (_ for _ in ()).throw(
+            AssertionError("search called doctor")
+        ),
+        search_service_factory=lambda _settings: (_ for _ in ()).throw(
+            AssertionError("invalid search opened runtime")
+        ),
+        environ={"PAPER_INSIGHTS_DATA_ROOT": str(tmp_path)},
+        stdout=stdout,
+        stderr=stderr,
+    )
+
+    assert code == 2
+    assert stdout.getvalue() == ""
+    assert json.loads(stderr.getvalue())["error"]["code"] == "invalid_request"
+
+
+def test_cli_envelope_forbids_extra_fields_and_unknown_operations() -> None:
+    valid = {
+        "schema_version": "paper-insights.cli.v1",
+        "operation": "discover",
+        "data": {},
+        "coverage": {"status": "complete"},
+        "errors": [],
+        "truncated": False,
+    }
+
+    assert CliEnvelope.model_validate(valid).operation == "discover"
+    with pytest.raises(ValidationError):
+        CliEnvelope.model_validate({**valid, "operation": "unknown"})
+    with pytest.raises(ValidationError):
+        CliEnvelope.model_validate({**valid, "unexpected": True})
 
 
 def test_offline_arxiv_cli_preserves_versions_and_provenance(tmp_path: Path) -> None:
@@ -119,11 +233,22 @@ def test_offline_arxiv_cli_preserves_versions_and_provenance(tmp_path: Path) -> 
             UUID("01890f3e-3b12-7cc0-98d6-4f6f94748f5a"),
             UUID("01890f3e-3b12-7cc0-98d6-4f6f94748f5a"),
             UUID("01890f3e-3b12-7cc0-98d6-4f6f94748f5b"),
+            UUID("01890f3e-3b12-7cc0-98d6-4f6f94748f5d"),
         )
     )
 
     def handler(request: httpx.Request) -> httpx.Response:
         query = request.url.params.get("search_query", "")
+        if "hostile-conflict" in query:
+            payload = (
+                (FIXTURES / "revision-v2.xml")
+                .read_bytes()
+                .replace(
+                    b"2608.01234",
+                    b"2608.05678",
+                )
+            )
+            return httpx.Response(200, content=payload, request=request)
         fixture = "revision-v2.xml" if "id:2608.01234" in query else "page-1.xml"
         return httpx.Response(
             200,
@@ -139,13 +264,17 @@ def test_offline_arxiv_cli_preserves_versions_and_provenance(tmp_path: Path) -> 
             doctor_service_factory=lambda _settings: (_ for _ in ()).throw(
                 AssertionError("vertical slice called doctor")
             ),
-            ingestion_service_factory=lambda settings, source: ingestion_service(
+            discover_service_factory=lambda settings, source: discover_service(
                 settings,
                 source,
                 transport=httpx.MockTransport(handler),
                 clock=clock,
-                ids=ids,
                 new_capture_id=lambda: next(capture_ids),
+            ),
+            ingestion_service_factory=lambda settings: ingestion_service(
+                settings,
+                clock=clock,
+                ids=ids,
             ),
             collections_service_factory=collections_service,
             search_service_factory=search_service,
@@ -217,9 +346,35 @@ def test_offline_arxiv_cli_preserves_versions_and_provenance(tmp_path: Path) -> 
             "SELECT id FROM paper_versions WHERE source_version_key = ?",
             ("2608.01234v2",),
         ).fetchone()[0]
+        v1_id = connection.execute(
+            "SELECT id FROM paper_versions WHERE source_version_key = ?",
+            ("2608.01234v1",),
+        ).fetchone()[0]
+        v1_snapshot, v1_ordinal = connection.execute(
+            "SELECT vo.origin_source_snapshot_id, vo.origin_record_ordinal "
+            "FROM version_observations AS vo WHERE vo.paper_version_id = ?",
+            (v1_id,),
+        ).fetchone()
+        v2_snapshot, v2_ordinal = connection.execute(
+            "SELECT vo.origin_source_snapshot_id, vo.origin_record_ordinal "
+            "FROM version_observations AS vo WHERE vo.paper_version_id = ?",
+            (v2_id,),
+        ).fetchone()
+        snapshot_count = connection.execute("SELECT count(*) FROM source_snapshots").fetchone()[0]
+        snapshot_record_count = connection.execute(
+            "SELECT count(*) FROM snapshot_records"
+        ).fetchone()[0]
+        exact_links = connection.execute(
+            "SELECT count(*) FROM snapshot_records AS sr "
+            "JOIN version_observations AS vo ON vo.id = sr.version_observation_id "
+            "WHERE vo.origin_source_snapshot_id = sr.source_snapshot_id "
+            "AND vo.origin_record_ordinal = sr.ordinal"
+        ).fetchone()[0]
 
     assert (paper_count, version_count) == (2, 3)
     assert v1_title == "Reliable Paper Agents"
+    assert (snapshot_count, snapshot_record_count, exact_links) == (2, 3, 3)
+    assert (v1_ordinal, v2_ordinal) == (0, 0)
 
     for citation_format in ("bibtex", "markdown", "csl-json"):
         cite_code, citation, cite_error = invoke(
@@ -236,6 +391,42 @@ def test_offline_arxiv_cli_preserves_versions_and_provenance(tmp_path: Path) -> 
         assert cite_code == 0
         assert cite_error == ""
         assert citation["data"]["format"] == citation_format  # type: ignore[index]
+        assert citation["data"]["paper_version_id"] == v2_id  # type: ignore[index]
         assert citation["data"]["source_id"] == "arxiv"  # type: ignore[index]
-        assert citation["data"]["snapshot_id"]  # type: ignore[index]
-        assert citation["data"]["record_ordinal"] == 0  # type: ignore[index]
+        assert citation["data"]["snapshot_id"] == v2_snapshot  # type: ignore[index]
+        assert citation["data"]["record_ordinal"] == v2_ordinal  # type: ignore[index]
+
+    v1_code, v1_citation, v1_error = invoke(
+        [
+            "cite",
+            "arxiv:2608.01234",
+            "--paper-version-id",
+            v1_id,
+            "--format",
+            "markdown",
+            "--json",
+        ]
+    )
+    assert v1_code == 0
+    assert v1_error == ""
+    assert v1_citation["data"]["paper_version_id"] == v1_id  # type: ignore[index]
+    assert v1_citation["data"]["snapshot_id"] == v1_snapshot  # type: ignore[index]
+    assert "Reliable Paper Agents" in v1_citation["data"]["content"]  # type: ignore[index,operator]
+    assert "Revised" not in v1_citation["data"]["content"]  # type: ignore[index,operator]
+
+    conflict_code, conflict, conflict_error = invoke(
+        ["ingest", "arxiv", "hostile-conflict", "--limit", "1", "--yes", "--json"]
+    )
+    assert conflict_code == 4
+    assert conflict_error == ""
+    assert conflict["data"]["counters"]["failed_records"] == 1  # type: ignore[index]
+    with sqlite3.connect(data_root / "catalog.sqlite3") as connection:
+        assert connection.execute("SELECT count(*) FROM paper_versions").fetchone()[0] == 3
+        assert connection.execute("SELECT count(*) FROM collection_errors").fetchone()[0] == 1
+        assert (
+            connection.execute(
+                "SELECT is_current FROM paper_versions WHERE id = ?",
+                (v2_id,),
+            ).fetchone()[0]
+            == 1
+        )
