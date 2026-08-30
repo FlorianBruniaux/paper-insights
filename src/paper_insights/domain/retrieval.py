@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Protocol
 from uuid import UUID
 
+from paper_insights.domain.acquisition import IdentifierScope
 from paper_insights.domain.identifiers import (
     CollectionId,
     PaperId,
@@ -41,6 +42,19 @@ class CoverageStatus(StrEnum):
     PARTIAL = "partial"
     UNAVAILABLE = "unavailable"
     UNKNOWN = "unknown"
+
+
+@dataclass(frozen=True, slots=True, order=True)
+class SearchIdentifier:
+    scheme: str
+    canonical_value: str
+    scope: IdentifierScope
+
+    def __post_init__(self) -> None:
+        if not self.scheme or not self.canonical_value:
+            raise ValueError("search identifier values cannot be blank")
+        if not isinstance(self.scope, IdentifierScope):
+            raise TypeError("search identifier scope must be an IdentifierScope")
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,6 +113,7 @@ class IndexDocument:
     submitted_at: datetime | None = None
     collection_ids: tuple[CollectionId, ...] = ()
     collection_slugs: tuple[str, ...] = ()
+    identifiers: tuple[SearchIdentifier, ...] = ()
 
     def __post_init__(self) -> None:
         require_tuples(
@@ -107,6 +122,7 @@ class IndexDocument:
             "categories",
             "collection_ids",
             "collection_slugs",
+            "identifiers",
         )
         if not self.title.strip():
             raise ValueError("index document title is required")
@@ -128,6 +144,8 @@ class IndexDocument:
             raise ValueError("index document collection slugs must be unique")
         if len(self.collection_ids) != len(self.collection_slugs):
             raise ValueError("index document collection IDs and slugs must have equal cardinality")
+        if len(set(self.identifiers)) != len(self.identifiers):
+            raise ValueError("index document identifiers must be unique")
 
 
 def _uuid_shaped(value: str) -> bool:
@@ -253,10 +271,18 @@ class PaperSearchHit:
     rank: int
     bm25_score: float
     artifact_sha256: Sha256
+    source_id: SourceId
+    authors: tuple[str, ...] = ()
+    identifiers: tuple[SearchIdentifier, ...] = ()
 
     def __post_init__(self) -> None:
+        require_tuples(self, "authors", "identifiers")
         if self.rank < 1 or not self.title:
             raise ValueError("paper search hit rank and title are required")
+        if any(not author.strip() for author in self.authors):
+            raise ValueError("paper search hit authors cannot be blank")
+        if len(set(self.identifiers)) != len(self.identifiers):
+            raise ValueError("paper search hit identifiers must be unique")
 
 
 @dataclass(frozen=True, slots=True)

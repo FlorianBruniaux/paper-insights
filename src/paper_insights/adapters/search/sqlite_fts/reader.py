@@ -7,11 +7,13 @@ from pathlib import Path
 from uuid import UUID
 
 from paper_insights.application.ports.catalog import CatalogReader
+from paper_insights.domain.acquisition import IdentifierScope
 from paper_insights.domain.identifiers import (
     PaperId,
     PaperVersionId,
     PassageId,
     Sha256,
+    SourceId,
     VersionObservationId,
 )
 from paper_insights.domain.retrieval import (
@@ -26,6 +28,7 @@ from paper_insights.domain.retrieval import (
     PassageSearchResult,
     PassageView,
     SearchFilters,
+    SearchIdentifier,
 )
 
 from .schema import (
@@ -57,7 +60,7 @@ _PAPER_COUNT_SQL = (
 )
 _PAPER_SEARCH_SQL = (
     "SELECT d.paper_id, d.paper_version_id, d.version_observation_id, "
-    "d.title, d.artifact_sha256, bm25(paper_fts, 10.0, 1.0) AS score "
+    "d.source_id, d.title, d.artifact_sha256, bm25(paper_fts, 10.0, 1.0) AS score "
     "FROM paper_fts JOIN documents AS d "
     "ON d.paper_version_id = paper_fts.paper_version_id "
     "WHERE paper_fts MATCH ?"
@@ -130,6 +133,12 @@ class SqliteFtsSearchReader:
                     _PAPER_SEARCH_SQL,
                     (expression, *filter_parameters, query.limit),
                 ).fetchall()
+            enrichments = {
+                str(row["paper_version_id"]): self._paper_enrichment(
+                    connection, str(row["paper_version_id"])
+                )
+                for row in rows
+            }
         hits = tuple(
             PaperSearchHit(
                 paper_id=PaperId(UUID(str(row["paper_id"]))),
@@ -141,6 +150,9 @@ class SqliteFtsSearchReader:
                 rank=rank,
                 bm25_score=float(row["score"]),
                 artifact_sha256=Sha256(str(row["artifact_sha256"])),
+                source_id=SourceId(str(row["source_id"])),
+                authors=enrichments[str(row["paper_version_id"])][0],
+                identifiers=enrichments[str(row["paper_version_id"])][1],
             )
             for rank, row in enumerate(rows, start=1)
         )
@@ -154,6 +166,32 @@ class SqliteFtsSearchReader:
             available=available,
             applied_limit=query.limit,
         )
+
+    @staticmethod
+    def _paper_enrichment(
+        connection: sqlite3.Connection,
+        paper_version_id: str,
+    ) -> tuple[tuple[str, ...], tuple[SearchIdentifier, ...]]:
+        authors = tuple(
+            str(row[0])
+            for row in connection.execute(
+                "SELECT name FROM document_authors WHERE paper_version_id = ? ORDER BY position",
+                (paper_version_id,),
+            )
+        )
+        identifiers = tuple(
+            SearchIdentifier(
+                scheme=str(row[0]),
+                canonical_value=str(row[1]),
+                scope=IdentifierScope(str(row[2])),
+            )
+            for row in connection.execute(
+                "SELECT scheme, canonical_value, scope FROM document_identifiers "
+                "WHERE paper_version_id = ? ORDER BY position",
+                (paper_version_id,),
+            )
+        )
+        return authors, identifiers
 
     def search_passages(self, query: PassageSearchQuery) -> PassageSearchResult:
         catalog_revision = self._catalog_revision()

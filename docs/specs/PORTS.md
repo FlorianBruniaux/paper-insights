@@ -265,7 +265,7 @@ WP-01 fournit au minimum les DTO immuables suivants, avec égalité structurelle
 - acquisition: `DiscoveryQuery`, `DiscoveryPage`, `DiscoveryRecord`, `DiscoveryIssue`, `DiscoveryBatch`, `DiscoveryPreview`, `PreparedDiscovery`, `ObservedAuthor`, `ObservedCategory`, `IdentifierScope` et `ObservedIdentifier`;
 - corpus: IDs typés, `PaperSelector`, `VersionSelector`, `PaperIdentity`, `ObservedPaperVersion`, `VersionObservation`, `ArtifactRef`;
 - ingestion: `AttachPreparedRun`, `PreparedSnapshotAttachment`, `SnapshotRecordAttachment`, `AttachedSnapshotRef`, `MetadataBlobRef`, `RecordObservation`, `RecordIngestionItem`, `RecordIngestionFailure`, `IngestionFailureStage`, `IngestionOutcome`, `IngestionItemRef`, `IngestionRunRef`, `IngestionSummary`, `InterruptedRunCandidate`, `RepairInterruptedRun`, `InterruptedRunRepairOutcome` et `InterruptedRunRepairResult`;
-- retrieval: `CatalogRevision`, `IndexDocument`, `IndexBuildRequest`, `IndexReceipt`, `IndexCandidate`, `SearchFilters`, `PaperSearchQuery`, `PaperSearchResult`, `PassageSearchQuery`, `PassageSearchResult`, `PassageView`;
+- retrieval: `CatalogRevision`, `SearchIdentifier`, `IndexDocument`, `IndexBuildRequest`, `IndexReceipt`, `IndexCandidate`, `SearchFilters`, `PaperSearchQuery`, `PaperSearchResult`, `PassageSearchQuery`, `PassageSearchResult`, `PassageView`;
 - citation et collections: `CitationSelector`, `CitationInput`, `CitationFormat`, `CitationResult`, `CreateCollection`, `RenameCollection`, `AddCollectionPaper`, `RemoveCollectionPaper` et `CollectionView`;
 - gates ultérieures: DTO de veille, texte, analyse, identité et fédération nommés dans les signatures ci-dessus.
 

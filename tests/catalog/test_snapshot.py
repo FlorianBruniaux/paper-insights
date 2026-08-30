@@ -18,6 +18,7 @@ from paper_insights.adapters.catalog.sqlite.readers import (
     SqliteCatalogRevisionGuard,
 )
 from paper_insights.adapters.catalog.sqlite.uow import SqliteCatalogUnitOfWorkFactory
+from paper_insights.domain.acquisition import IdentifierScope
 from paper_insights.domain.corpus import CitationSelector, CreateCollection
 from paper_insights.domain.identifiers import (
     CollectionId,
@@ -26,7 +27,7 @@ from paper_insights.domain.identifiers import (
     PaperVersionId,
     SourceId,
 )
-from paper_insights.domain.retrieval import CatalogRevision
+from paper_insights.domain.retrieval import CatalogRevision, SearchIdentifier
 
 NOW = datetime(2026, 8, 29, 8, 0, tzinfo=UTC)
 IDS = tuple(UUID(f"01890f3b-0000-7000-8000-{value:012d}") for value in range(1, 10))
@@ -399,6 +400,12 @@ def test_snapshot_reconstructs_versioned_paper_index_and_citation(engine: Engine
         CollectionId(second_collection_id),
     )
     assert document.collection_slugs == ("alpha", "zeta")
+    assert document.identifiers == (
+        SearchIdentifier("arxiv", "2608.00001", IdentifierScope.PAPER),
+        SearchIdentifier("doi", "10.1000/catalog", IdentifierScope.PAPER),
+        SearchIdentifier("doi", "10.1000/catalog", IdentifierScope.VERSION),
+        SearchIdentifier("doi", "10.1000/version-only", IdentifierScope.VERSION),
+    )
     assert citation is not None
     assert citation.snapshot_id.value == snapshot_id
     assert citation.source_item_id == "2608.00001"

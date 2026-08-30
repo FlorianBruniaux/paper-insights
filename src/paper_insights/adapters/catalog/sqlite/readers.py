@@ -41,7 +41,7 @@ from paper_insights.domain.identifiers import (
     SourceId,
     VersionObservationId,
 )
-from paper_insights.domain.retrieval import CatalogRevision, IndexDocument
+from paper_insights.domain.retrieval import CatalogRevision, IndexDocument, SearchIdentifier
 
 from .errors import CatalogConflict
 
@@ -256,6 +256,20 @@ class SqliteCatalogSnapshot:
                 ),
                 {"observation_id": observation["id"]},
             ).scalars()
+            identifier_rows = connection.execute(
+                sa.text(
+                    "SELECT scheme, canonical_value, 'paper' AS scope, 0 AS scope_order "
+                    "FROM paper_identifiers WHERE paper_id = :paper_id "
+                    "UNION ALL "
+                    "SELECT scheme, canonical_value, 'version' AS scope, 1 AS scope_order "
+                    "FROM version_identifiers WHERE paper_version_id = :version_id "
+                    "ORDER BY scope_order, scheme, canonical_value"
+                ),
+                {
+                    "paper_id": version["paper_id"],
+                    "version_id": version["id"],
+                },
+            ).mappings()
             collection_rows = connection.execute(
                 sa.text(
                     "SELECT c.id, c.slug FROM collection_papers AS cp "
@@ -284,6 +298,14 @@ class SqliteCatalogSnapshot:
                     ),
                     collection_ids=tuple(CollectionId(UUID(row["id"])) for row in collections),
                     collection_slugs=tuple(row["slug"] for row in collections),
+                    identifiers=tuple(
+                        SearchIdentifier(
+                            scheme=row["scheme"],
+                            canonical_value=row["canonical_value"],
+                            scope=IdentifierScope(row["scope"]),
+                        )
+                        for row in identifier_rows
+                    ),
                 )
             )
         return tuple(documents)

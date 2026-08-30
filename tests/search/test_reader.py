@@ -15,6 +15,7 @@ from paper_insights.adapters.search.sqlite_fts.builder import SqliteFtsIndexBuil
 from paper_insights.adapters.search.sqlite_fts.reader import SqliteFtsSearchReader
 from paper_insights.adapters.search.sqlite_fts.schema import open_readonly
 from paper_insights.application.research.search import LocalSearch
+from paper_insights.domain.acquisition import IdentifierScope
 from paper_insights.domain.identifiers import (
     CollectionId,
     PaperId,
@@ -31,6 +32,7 @@ from paper_insights.domain.retrieval import (
     PaperSearchQuery,
     PassageSearchQuery,
     SearchFilters,
+    SearchIdentifier,
 )
 
 _ARXIV_SOURCE = SourceId("arxiv")
@@ -90,6 +92,7 @@ def _document(
     submitted_at: datetime | None = None,
     collection_ids: tuple[CollectionId, ...] = (),
     collection_slugs: tuple[str, ...] = (),
+    identifiers: tuple[SearchIdentifier, ...] = (),
 ) -> IndexDocument:
     suffix = f"{index:02x}"
     return IndexDocument(
@@ -108,6 +111,7 @@ def _document(
         submitted_at=submitted_at,
         collection_ids=collection_ids,
         collection_slugs=collection_slugs,
+        identifiers=identifiers,
     )
 
 
@@ -116,7 +120,16 @@ def _published_index(tmp_path: Path, *, revision: int = 5) -> Path:
     request = IndexBuildRequest(
         documents=(
             _document(1, "Agent evaluation", "Benchmark evidence for local agents."),
-            _document(2, "Agent evidence", "Evaluation methods with provenance."),
+            _document(
+                2,
+                "Agent evidence",
+                "Evaluation methods with provenance.",
+                authors=("Alice Example", "Bob Researcher"),
+                identifiers=(
+                    SearchIdentifier("arxiv", "2608.05678", IdentifierScope.PAPER),
+                    SearchIdentifier("doi", "10.1234/example.2", IdentifierScope.PAPER),
+                ),
+            ),
             _document(3, "Protein structure", "A biology result."),
         ),
         catalog_revision=CatalogRevision(revision),
@@ -198,6 +211,12 @@ def test_paper_search_returns_stable_rank_raw_score_revisions_and_counts(
     assert isinstance(first.hits[0].bm25_score, float)
     assert first.hits[0].title == "Agent evidence"
     assert first.hits[0].artifact_sha256 == Sha256("2" * 64)
+    assert first.hits[0].source_id == SourceId("arxiv")
+    assert first.hits[0].authors == ("Alice Example", "Bob Researcher")
+    assert first.hits[0].identifiers == (
+        SearchIdentifier("arxiv", "2608.05678", IdentifierScope.PAPER),
+        SearchIdentifier("doi", "10.1234/example.2", IdentifierScope.PAPER),
+    )
 
 
 @pytest.mark.parametrize(

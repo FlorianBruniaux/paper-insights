@@ -49,6 +49,7 @@ def make_result(**changes: object) -> PaperSearchResult:
         rank=1,
         bm25_score=-1.0,
         artifact_sha256=Sha256("a" * 64),
+        source_id=SourceId("arxiv"),
     )
     values: dict[str, object] = {
         "hits": (hit,),
@@ -191,6 +192,7 @@ def test_search_rejects_blank_query_excess_hits_and_bad_rank_order() -> None:
         rank=2,
         bm25_score=first.bm25_score,
         artifact_sha256=first.artifact_sha256,
+        source_id=first.source_id,
     )
     with pytest.raises(ValueError):
         make_result(hits=(first, second), returned=2, available=2, applied_limit=1)
@@ -203,6 +205,7 @@ def test_search_rejects_blank_query_excess_hits_and_bad_rank_order() -> None:
         rank=first.rank,
         bm25_score=first.bm25_score,
         artifact_sha256=first.artifact_sha256,
+        source_id=first.source_id,
     )
     with pytest.raises(ValueError):
         make_result(hits=(first, duplicate), returned=2, available=2, applied_limit=2)

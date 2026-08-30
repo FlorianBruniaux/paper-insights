@@ -50,7 +50,7 @@ Le texte est normalisé en Unicode NFC et les fins de ligne deviennent `\n`. Les
 
 Une erreur ou une révision obsolète laisse l'index publié précédent intact. Une panne avant le remplacement laisse l'ancien index; une panne après le remplacement laisse une base nouvelle et auto-descriptive. Aucun journal SQLite ni second fichier ne participe à l'atomicité.
 
-L'index publié actuel déclare `index_schema_version = "fts-v2"`. Son empreinte logique couvre aussi la source, les auteurs ordonnés, les catégories, la langue, la date de soumission et les couples collection ID/slug. Si le répertoire parent est renommé pendant le remplacement, l'ancien index est restauré au chemin canonique et l'opération échoue. Le code ne supprime aucun nom dans le répertoire déplacé, car son identité pourrait avoir changé; un résidu de la candidate peut donc y rester et doit être traité comme `UNKNOWN` par une inspection opérateur.
+L'index publié actuel déclare `index_schema_version = "fts-v2"`. Son empreinte logique couvre aussi la source, les auteurs ordonnés, les identifiants canoniques avec leur scope, les catégories, la langue, la date de soumission et les couples collection ID/slug. Si le répertoire parent est renommé pendant le remplacement, l'ancien index est restauré au chemin canonique et l'opération échoue. Le code ne supprime aucun nom dans le répertoire déplacé, car son identité pourrait avoir changé; un résidu de la candidate peut donc y rester et doit être traité comme `UNKNOWN` par une inspection opérateur.
 
 ## Requêtes et résultats
 
@@ -78,6 +78,8 @@ Limites: 10 par défaut, 50 au maximum pour la CLI, 20 au maximum pour MCP.
 - limites appliquées.
 
 Chaque hit contient rang et score BM25 brut. Aucun pourcentage de pertinence n'est inventé. Un benchmark annoté doit approuver un changement d'indexation avant publication.
+
+Un hit papier restitue aussi la source, les auteurs ordonnés et les identifiants canoniques du papier et de la version, avec leur scope explicite. Cette projection est incluse dans l'empreinte de l'index; la CLI n'effectue aucune seconde lecture implicite pour la reconstruire.
 
 Les lectures ouvrent SQLite avec URI `mode=ro`, `query_only=ON` et un délai borné. Elles ne déclenchent aucun réseau, ingestion, rebuild, extraction ou analyse.
 

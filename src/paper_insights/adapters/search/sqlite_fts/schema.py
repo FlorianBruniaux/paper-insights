@@ -57,6 +57,17 @@ CREATE TABLE document_authors (
 CREATE INDEX ix_document_authors_name
 ON document_authors (name_folded, paper_version_id);
 
+CREATE TABLE document_identifiers (
+    paper_version_id TEXT NOT NULL,
+    position INTEGER NOT NULL CHECK (position >= 0),
+    scheme TEXT NOT NULL,
+    canonical_value TEXT NOT NULL,
+    scope TEXT NOT NULL CHECK (scope IN ('paper', 'version')),
+    PRIMARY KEY (paper_version_id, position),
+    UNIQUE (paper_version_id, scheme, canonical_value, scope),
+    FOREIGN KEY (paper_version_id) REFERENCES documents (paper_version_id)
+);
+
 CREATE TABLE document_categories (
     paper_version_id TEXT NOT NULL,
     position INTEGER NOT NULL CHECK (position >= 0),
@@ -328,6 +339,7 @@ def _logical_content_sha256(connection: sqlite3.Connection) -> str:
         ).fetchall(),
         value_column="category",
     )
+    identifiers_by_version = _ordered_identifier_projection(connection)
     collections_by_version = _ordered_collection_projection(connection)
     passage_rows = connection.execute(
         "SELECT passage_id, paper_id, paper_version_id, version_observation_id, "
@@ -370,6 +382,7 @@ def _logical_content_sha256(connection: sqlite3.Connection) -> str:
                 "authors": authors_by_version.get(item["paper_version_id"], []),
                 "categories": categories_by_version.get(item["paper_version_id"], []),
                 "collections": collections_by_version.get(item["paper_version_id"], []),
+                "identifiers": identifiers_by_version.get(item["paper_version_id"], []),
                 "language": item["language"],
                 "paper_id": item["paper_id"],
                 "paper_version_id": item["paper_version_id"],
@@ -436,5 +449,24 @@ def _ordered_collection_projection(
     for row in rows:
         projected.setdefault(str(row["paper_version_id"]), []).append(
             {"collection_id": str(row["collection_id"]), "slug": str(row["slug"])}
+        )
+    return projected
+
+
+def _ordered_identifier_projection(
+    connection: sqlite3.Connection,
+) -> dict[str, list[dict[str, str]]]:
+    rows = connection.execute(
+        "SELECT paper_version_id, position, scheme, canonical_value, scope "
+        "FROM document_identifiers ORDER BY paper_version_id, position"
+    ).fetchall()
+    projected: dict[str, list[dict[str, str]]] = {}
+    for row in rows:
+        projected.setdefault(str(row["paper_version_id"]), []).append(
+            {
+                "scheme": str(row["scheme"]),
+                "canonical_value": str(row["canonical_value"]),
+                "scope": str(row["scope"]),
+            }
         )
     return projected

@@ -614,6 +614,14 @@ class SqliteFtsIndexBuilder:
                         )
                     ],
                     "language": item.language,
+                    "identifiers": [
+                        {
+                            "scheme": identifier.scheme,
+                            "canonical_value": identifier.canonical_value,
+                            "scope": identifier.scope.value,
+                        }
+                        for identifier in item.identifiers
+                    ],
                     "paper_id": str(item.paper_id),
                     "paper_version_id": str(item.paper_version_id),
                     "source_id": str(item.source_id),
@@ -701,6 +709,21 @@ class SqliteFtsIndexBuilder:
                             _fold(author),
                         )
                         for position, author in enumerate(document.authors)
+                    ),
+                )
+                connection.executemany(
+                    "INSERT INTO document_identifiers "
+                    "(paper_version_id, position, scheme, canonical_value, scope) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (
+                        (
+                            str(document.paper_version_id),
+                            position,
+                            identifier.scheme,
+                            identifier.canonical_value,
+                            identifier.scope.value,
+                        )
+                        for position, identifier in enumerate(document.identifiers)
                     ),
                 )
                 connection.executemany(
