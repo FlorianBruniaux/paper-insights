@@ -1,0 +1,22 @@
+tests/search/test_builder.py
+  s_2f2b8a177ba283::t_317db4903902b0 394-402,404,408-443
+  s_2f2b8a177ba283::t_3a2ffe11a4bad0 444-448
+src/paper_insights/adapters/search/sqlite_fts/builder.py
+  s_2f2b8a177ba283::t_aa01a6d9b9cf94 233-237
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "442ca038a33476699552a9362c6ae8b7fbae6d86",
+  "prompts": {},
+  "sessions": {
+    "s_2f2b8a177ba283": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a04a7c-f938-7500-b20e-0faa6c4019c5",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Florian BRUNIAUX <florian@bruniaux.com>"
+    }
+  }
+}
