@@ -33,6 +33,7 @@ def paper_result_data(result: PaperSearchResult) -> dict[str, object]:
     return {
         "catalog_revision": result.catalog_revision.value,
         "index_revision": result.index_revision.value,
+        "applied_limit": result.applied_limit,
         "hits": [
             {
                 "paper_id": str(hit.paper_id),
@@ -59,23 +60,36 @@ def paper_result_data(result: PaperSearchResult) -> dict[str, object]:
 
 
 def render_paper_result(result: PaperSearchResult) -> str:
-    lines: list[str] = []
+    available = "unknown" if result.available is None else str(result.available)
+    lines = [
+        "search.papers | "
+        f"catalog_revision={result.catalog_revision.value} | "
+        f"index_revision={result.index_revision.value} | "
+        f"coverage={result.coverage.value} | returned={result.returned} | "
+        f"available={available} | truncated={str(result.truncated).lower()} | "
+        f"applied_limit={result.applied_limit}"
+    ]
     for hit in result.hits:
         authors = ", ".join(hit.authors)
         identifiers = ", ".join(
             f"{item.scheme}:{item.canonical_value} [{item.scope.value}]" for item in hit.identifiers
         )
         lines.append(
-            f"{hit.rank}. {hit.title} | source={hit.source_id} | "
+            f"{hit.rank}. {hit.title} | paper_id={hit.paper_id} | "
+            f"paper_version_id={hit.paper_version_id} | "
+            f"version_observation_id={hit.version_observation_id} | "
+            f"bm25_score={hit.bm25_score} | artifact_sha256={hit.artifact_sha256} | "
+            f"source={hit.source_id} | "
             f"authors=[{authors}] | identifiers=[{identifiers}]"
         )
-    return "\n".join(lines) + ("\n" if lines else "")
+    return "\n".join(lines) + "\n"
 
 
 def passage_result_data(result: PassageSearchResult) -> dict[str, object]:
     return {
         "catalog_revision": result.catalog_revision.value,
         "index_revision": result.index_revision.value,
+        "applied_limit": result.applied_limit,
         "hits": [
             {
                 "passage_id": str(hit.passage.passage_id),
