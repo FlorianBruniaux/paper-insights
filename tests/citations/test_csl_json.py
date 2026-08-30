@@ -16,11 +16,14 @@ def test_csl_json_is_canonical_and_uses_only_observed_author_parts() -> None:
         '"author":[{"family":"Lovelace","given":"Ada"},{"literal":"Research Group"}],'
         '"id":"arxiv:2608.01234v2",'
         '"issued":{"date-parts":[[2026,8,28]]},'
-        '"title":"Agents & {Evidence} \\\\ Systems_",'
-        '"type":"article"}'
+        '"title":"Agents & {Evidence} \\\\ Systems_"}'
     )
     assert json.loads(result.content)["author"][1] == {"literal": "Research Group"}
-    assert result.warnings == (CitationWarning.LITERAL_AUTHOR,)
+    assert result.missing_fields == ("type",)
+    assert result.warnings == (
+        CitationWarning.LITERAL_AUTHOR,
+        CitationWarning.MISSING_REQUIRED_FIELD,
+    )
     assert result.media_type == "application/vnd.citationstyles.csl+json"
 
 
@@ -36,10 +39,8 @@ def test_csl_json_omits_unobserved_optional_and_required_values() -> None:
         CitationFormat.CSL_JSON,
     )
 
-    assert result.content == (
-        '{"id":"arxiv:2608.01234v2","title":"Observed title","type":"article"}'
-    )
-    assert result.missing_fields == ("author", "issued")
+    assert result.content == '{"id":"arxiv:2608.01234v2","title":"Observed title"}'
+    assert result.missing_fields == ("author", "issued", "type")
     assert result.warnings == (CitationWarning.MISSING_REQUIRED_FIELD,)
 
 
@@ -58,4 +59,8 @@ def test_csl_json_uses_literal_author_when_a_separated_part_is_blank() -> None:
     )
 
     assert json.loads(result.content)["author"] == [{"literal": "Observed Consortium"}]
-    assert result.warnings == (CitationWarning.LITERAL_AUTHOR,)
+    assert result.missing_fields == ("type",)
+    assert result.warnings == (
+        CitationWarning.LITERAL_AUTHOR,
+        CitationWarning.MISSING_REQUIRED_FIELD,
+    )

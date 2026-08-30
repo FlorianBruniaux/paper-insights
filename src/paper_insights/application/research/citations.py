@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import html
 import json
 import re
+from urllib.parse import urlsplit
 
 from paper_insights.application.ports.catalog import CatalogReader
 from paper_insights.application.ports.citations import CitationRenderer
+from paper_insights.domain.acquisition import ObservedAuthor
 from paper_insights.domain.corpus import (
     CitationFormat,
     CitationInput,
@@ -76,9 +79,7 @@ class SourceBackedCitationRenderer:
         warnings: set[CitationWarning] = set()
 
         if observed.authors:
-            author_field = " and ".join(
-                _escape_bibtex(author.raw_name) for author in observed.authors
-            )
+            author_field = " and ".join(_bibtex_author(author) for author in observed.authors)
             fields.append(("author", author_field))
             if any(not author.given_name or not author.family_name for author in observed.authors):
                 warnings.add(CitationWarning.LITERAL_AUTHOR)
@@ -129,14 +130,19 @@ class SourceBackedCitationRenderer:
             missing.append("year")
         doi = _observed_doi(citation)
         if doi is not None:
-            segments.append(f"DOI: `{doi}`")
-        if observed.source_url is not None:
-            segments.append(f"Source: <{observed.source_url}>")
+            segments.append(f"DOI: {_code_span(doi)}")
+        source_url = _validated_https_url(observed.source_url)
+        if source_url is not None:
+            segments.append(f"Source: <{source_url}>")
+        else:
+            missing.append("url")
         reference = ". ".join(segments) + "."
         provenance = (
-            f"> Provenance: `{citation.source_id}:{citation.source_item_id}`; "
-            f"snapshot `{citation.snapshot_id}`; record `{citation.record_ordinal}`; "
-            f"retrieved `{_utc_z(citation.retrieved_at.isoformat())}`."
+            f"> Provenance: source {_code_span(str(citation.source_id))}; "
+            f"item {_code_span(citation.source_item_id)}; "
+            f"snapshot {_code_span(str(citation.snapshot_id))}; "
+            f"record {_code_span(str(citation.record_ordinal))}; "
+            f"retrieved {_code_span(_utc_z(citation.retrieved_at.isoformat()))}."
         )
         if missing:
             warnings.add(CitationWarning.MISSING_REQUIRED_FIELD)
@@ -163,8 +169,8 @@ class SourceBackedCitationRenderer:
         payload: dict[str, object] = {
             "id": f"{citation.source_id}:{observed.source_version_key}",
             "title": observed.title,
-            "type": "article",
         }
+        missing.append("type")
         if authors:
             payload["author"] = authors
         else:
@@ -205,8 +211,49 @@ def _escape_bibtex(value: str) -> str:
     return "".join(_BIBTEX_ESCAPES.get(character, character) for character in value)
 
 
+def _bibtex_author(author: ObservedAuthor) -> str:
+    if author.given_name and author.family_name:
+        return f"{_escape_bibtex(author.family_name)}, {_escape_bibtex(author.given_name)}"
+    return "{" + _escape_bibtex(author.raw_name) + "}"
+
+
 def _escape_markdown(value: str) -> str:
-    return "".join(f"\\{character}" if character in r"\`*_[]" else character for character in value)
+    escaped_html = html.escape(value, quote=False)
+    return "".join(
+        f"\\{character}" if character in r"\`*_[]" else character for character in escaped_html
+    )
+
+
+def _code_span(value: str) -> str:
+    longest_run = max((len(run) for run in re.findall(r"`+", value)), default=0)
+    delimiter = "`" * (longest_run + 1)
+    needs_padding = (
+        value.startswith("`")
+        or value.endswith("`")
+        or (value.startswith(" ") and value.endswith(" ") and not value.isspace())
+    )
+    padding = " " if needs_padding else ""
+    return f"{delimiter}{padding}{value}{padding}{delimiter}"
+
+
+def _validated_https_url(value: str | None) -> str | None:
+    if value is None or any(character.isspace() or ord(character) < 32 for character in value):
+        return None
+    if any(character in value for character in '<>"`\\'):
+        return None
+    try:
+        parsed = urlsplit(value)
+        _ = parsed.port
+    except ValueError:
+        return None
+    if (
+        parsed.scheme != "https"
+        or parsed.hostname is None
+        or parsed.username is not None
+        or parsed.password is not None
+    ):
+        return None
+    return value
 
 
 def _utc_z(value: str) -> str:
@@ -215,8 +262,8 @@ def _utc_z(value: str) -> str:
 
 def _bibtex_key(citation: CitationInput) -> str:
     observed = citation.observation.observed
-    exact_identifier = f"{citation.source_id.value}_{observed.source_version_key}"
-    return re.sub(r"[^A-Za-z0-9]+", "_", exact_identifier).strip("_")
+    exact_identifier = f"{citation.source_id.value}:{observed.source_version_key}"
+    return f"paperinsights_{exact_identifier.encode('utf-8').hex()}"
 
 
 def _observed_doi(citation: CitationInput) -> str | None:
