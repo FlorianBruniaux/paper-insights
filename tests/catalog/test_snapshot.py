@@ -534,6 +534,23 @@ def test_snapshot_missing_database_is_not_created(tmp_path: Path) -> None:
     assert not database_path.exists()
 
 
+def test_snapshot_does_not_create_wal_or_shared_memory_sidecars(
+    database_path: Path,
+    engine: Engine,
+) -> None:
+    wal = Path(f"{database_path}-wal")
+    shared_memory = Path(f"{database_path}-shm")
+    assert not wal.exists()
+    assert not shared_memory.exists()
+
+    reader = SqliteCatalogReader(engine)
+    with reader.snapshot() as snapshot:
+        assert snapshot.revision == CatalogRevision(0)
+
+    assert not wal.exists()
+    assert not shared_memory.exists()
+
+
 def test_citation_returns_none_when_resolved_paper_has_no_current_version(
     engine: Engine,
 ) -> None:

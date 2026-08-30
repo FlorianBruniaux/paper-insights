@@ -98,7 +98,7 @@ Toutes les connexions catalogue activent `foreign_keys=ON`, un `busy_timeout` co
 
 `catalog_meta.revision` commence à zéro après migration. Une transaction validée qui contient au moins une mutation visible l'incrémente exactement une fois dans la même transaction. Une lecture, un no-op, un rollback ou un échec ne l'incrémente pas.
 
-Une lecture cohérente utilise un `CatalogSnapshot`: la révision et les lignes sont lues dans la même transaction read-only. Aucun iterator ne survit à la fermeture de ce contexte.
+Une lecture cohérente utilise un `CatalogSnapshot`: la révision et les lignes sont lues dans la même transaction read-only. Le snapshot ouvre le fichier régulier par descripteur avec `mode=ro`, `immutable=1` et `query_only=ON`; il refuse un catalogue ayant un sidecar WAL ou SHM actif au lieu de créer ou modifier ces fichiers. Une mutation concurrente démarrée après l'ouverture ne change pas cette vue, et toute commande mutante revalide ensuite ses préconditions sous sa transaction d'écriture. Aucun iterator ne survit à la fermeture de ce contexte.
 
 ## Publication de l'index FTS5
 
@@ -124,16 +124,14 @@ Une erreur ou une révision obsolète laisse l'index publié précédent intact.
 
 Les passages utilisés comme preuves sont conservés dans le catalogue avec leur artefact et leurs offsets. L'index FTS reste une projection remplaçable. Une sortie invalide ou tronquée ne remplace jamais un cache valide.
 
-## Interface CLI cible
+## Interface CLI
 
-Les commandes suivantes sont des contrats cibles, pas une preuve de disponibilité:
+Les commandes `discover`, `ingest`, `search`, `index`, `cite`, `collections`, `doctor` et `repair interrupted-runs` sont disponibles depuis Gate 2. Elles passent par les services d'application, utilisent l'enveloppe `paper-insights.cli.v1` en JSON et ferment les erreurs publiques avec les codes documentés.
 
-- `paper-insights discover` et `paper-insights ingest` pour l'acquisition;
-- `paper-insights search`, `paper-insights index` et `paper-insights cite` pour la recherche;
-- `paper-insights collections` pour les mutations de collections hors MCP;
+Les commandes suivantes restent des contrats de gates ultérieurs et ne sont pas encore disponibles:
+
 - `paper-insights watch run <slug> --yes` pour chaque veille appelée par un scheduler externe;
 - `paper-insights analyze` et `paper-insights authors` pour les gates ultérieures;
-- `paper-insights repair interrupted-runs --yes` pour la récupération explicite;
 - `paper-insights mcp serve` pour la façade locale read-only.
 
 `doctor` reste strictement sans écriture et sans réseau. Le scheduler reste externe; aucun worker web ou scheduler embarqué n'est ajouté.

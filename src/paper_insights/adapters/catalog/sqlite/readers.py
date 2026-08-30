@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import os
+import sqlite3
+import stat
 from datetime import datetime, timedelta
 from pathlib import Path
 from types import TracebackType
@@ -9,6 +12,7 @@ from uuid import UUID
 
 import sqlalchemy as sa
 from sqlalchemy import Connection, Engine, create_engine
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.pool import NullPool
 
 from paper_insights.domain.acquisition import (
@@ -50,6 +54,47 @@ class CatalogRevisionMismatch(RuntimeError):
     pass
 
 
+def _open_immutable_catalog(database_path: Path) -> int:
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
+    try:
+        descriptor = os.open(database_path, flags)
+    except OSError as exc:
+        raise OperationalError(None, None, exc) from exc
+    try:
+        _assert_immutable_catalog(database_path, descriptor)
+    except BaseException:
+        os.close(descriptor)
+        raise
+    return descriptor
+
+
+def _assert_immutable_catalog(database_path: Path, descriptor: int) -> None:
+    opened = os.fstat(descriptor)
+    try:
+        current = os.lstat(database_path)
+    except OSError as exc:
+        raise OperationalError(None, None, exc) from exc
+    if (
+        not stat.S_ISREG(opened.st_mode)
+        or stat.S_ISLNK(current.st_mode)
+        or not stat.S_ISREG(current.st_mode)
+        or (opened.st_dev, opened.st_ino) != (current.st_dev, current.st_ino)
+    ):
+        raise OperationalError(None, None, sqlite3.OperationalError("binding changed"))
+    for suffix in ("-wal", "-shm"):
+        try:
+            os.lstat(f"{database_path}{suffix}")
+        except FileNotFoundError:
+            continue
+        except OSError as exc:
+            raise OperationalError(None, None, exc) from exc
+        raise OperationalError(
+            None,
+            None,
+            sqlite3.OperationalError("catalog snapshot has an active WAL sidecar"),
+        )
+
+
 class SqliteCatalogSnapshot:
     def __init__(self, engine: Engine) -> None:
         self._engine = engine
@@ -59,18 +104,30 @@ class SqliteCatalogSnapshot:
         self._database_path = Path(database)
         self._read_engine: Engine | None = None
         self._connection: Connection | None = None
+        self._file_descriptor: int | None = None
         self.revision = CatalogRevision(0)
 
     def __enter__(self) -> SqliteCatalogSnapshot:
         if self._connection is not None:
             raise RuntimeError("catalog snapshot is already open")
-        database_uri = quote(str(self._database_path), safe="/")
+        file_descriptor = _open_immutable_catalog(self._database_path)
+        database_uri = quote(f"/dev/fd/{file_descriptor}", safe="/")
+
+        def _open_readonly() -> sqlite3.Connection:
+            return sqlite3.connect(
+                f"file:{database_uri}?mode=ro&immutable=1",
+                uri=True,
+                check_same_thread=False,
+            )
+
         read_engine = create_engine(
-            f"sqlite+pysqlite:///file:{database_uri}?mode=ro&uri=true",
+            f"sqlite+pysqlite:///{self._database_path}",
+            creator=_open_readonly,
             poolclass=NullPool,
         )
         try:
             connection = read_engine.connect()
+            _assert_immutable_catalog(self._database_path, file_descriptor)
             connection.exec_driver_sql("PRAGMA query_only = ON")
             connection.exec_driver_sql("BEGIN")
             revision = connection.execute(
@@ -80,9 +137,11 @@ class SqliteCatalogSnapshot:
             if "connection" in locals():
                 connection.close()
             read_engine.dispose()
+            os.close(file_descriptor)
             raise
         self._read_engine = read_engine
         self._connection = connection
+        self._file_descriptor = file_descriptor
         self.revision = CatalogRevision(int(revision))
         return self
 
@@ -103,6 +162,9 @@ class SqliteCatalogSnapshot:
                 if self._read_engine is not None:
                     self._read_engine.dispose()
                     self._read_engine = None
+                if self._file_descriptor is not None:
+                    os.close(self._file_descriptor)
+                    self._file_descriptor = None
         return False
 
     def _require_open(self) -> Connection:

@@ -51,6 +51,8 @@ paper-insights search papers "coding agents evaluation" --from 2025-01-01 --limi
 
 Chaque résultat expose papier, version, observation, auteurs, source, identifiants, rang, score BM25 brut, révision et couverture. Le JSON et le rendu terminal conservent les mêmes données métier.
 
+Une date `YYYY-MM-DD` est interprétée en UTC. `--from` vise le début du jour et `--to` sa dernière microseconde, ce qui rend les deux bornes inclusives. Un timestamp RFC3339 UTC complet conserve son instant exact.
+
 ### Préparer une citation
 
 Commande cible:
@@ -95,6 +97,8 @@ paper-insights repair interrupted-runs --yes
 ```
 
 `doctor` ne crée et ne modifie rien, n'appelle aucun réseau et rend `UNKNOWN` lorsqu'une preuve manque. `repair` est une mutation distincte. Sans `--yes`, elle présente la sélection puis termine avec le code `3` sans écrire.
+
+Sans option supplémentaire, une run doit être inactive depuis 24 heures pour entrer dans la preview de réparation. `--stale-after-seconds` permet un override explicite strictement positif.
 
 ## Cas d'usage différés jusqu'à leurs gates
 
@@ -148,7 +152,7 @@ Les DTO du domaine restent des dataclasses immuables. Pydantic valide uniquement
 | 0 | Succès complet |
 | 2 | Entrée ou configuration invalide |
 | 3 | Confirmation requise, aucune mutation |
-| 4 | Succès partiel avec erreurs enregistrées |
+| 4 | Exécution terminée avec erreurs d'items enregistrées, que la run soit `partial` ou `failed` |
 | 5 | Source externe indisponible |
 | 6 | Corpus ou index invalide |
 
