@@ -1,0 +1,59 @@
+tests/search/test_reader.py
+  s_2f2b8a177ba283::t_d447a5254e2957 99,109,133-138,155,167,195,210,220
+  s_2f2b8a177ba283::t_8217b7e6bd5d09 178-191
+src/paper_insights/adapters/search/sqlite_fts/reader.py
+  s_2f2b8a177ba283::t_445a31dd52625f 29-34,45,50-51,58,70,120,133,178,180
+tests/search/test_hostile_queries.py
+  s_2f2b8a177ba283::t_d447a5254e2957 86,89
+tests/search/test_builder.py
+  s_2f2b8a177ba283::t_21e667c9e6f6f7 48,67
+  s_2f2b8a177ba283::t_b5c91e9918ee62 260-280
+  s_2f2b8a177ba283::t_033f82941195bd 5,8,53-66,69,319-321,330-335,337-340,342-352,354-358,360-362
+  s_2f2b8a177ba283::t_dafadb1446d0c7 171,253
+  s_2f2b8a177ba283::t_324600474bde02 31,336,341
+  s_2f2b8a177ba283::t_67a570cad47441 3,15,17-20,162-170,172-177,234-237,239-252,254-257,291-296,322,324-325,328-329,353,363-374,379-382
+  s_2f2b8a177ba283::t_deb71861cc9264 385-409
+  s_2f2b8a177ba283::t_9a7d30b90b1dd5 145,151,181-184,195,208-211,218,238,285,308-311,323,326-327,359,375-378,415-418,429-432,439,459-462
+  s_2f2b8a177ba283::t_7e0eff4d333938 49-52
+  s_2f2b8a177ba283::t_7e420b762da2c9 178-179
+  s_2f2b8a177ba283::t_250351be1e8d47 258-259
+  s_2f2b8a177ba283::t_b5441ffdaab850 383-384
+src/paper_insights/adapters/search/sqlite_fts/builder.py
+  s_2f2b8a177ba283::t_7ad36190a5426e 94-102,131-132,135-142,145-146,148,158-160,166-169,171-187,195-197,199-204,207,209-222
+  s_2f2b8a177ba283::t_66927765909dba 6,9,25-27,29-49
+  s_2f2b8a177ba283::t_b97fd9f52cdf42 28,224-311,363
+  s_2f2b8a177ba283::t_7d76079e274e33 90-93,223,429-431
+tests/benchmarks/test_search_relevance.py
+  s_2f2b8a177ba283::t_8217b7e6bd5d09 7,22,135-147,151-185,188-189
+  s_2f2b8a177ba283::t_dafadb1446d0c7 186
+  s_2f2b8a177ba283::t_72b0dc85b980dd 4,6,43-134,194,201-202
+  s_a76087f74be2bb::t_65e34ef925f5c7 187
+src/paper_insights/adapters/search/sqlite_fts/schema.py
+  s_2f2b8a177ba283::t_b34ae347b75bfb 5,7,17-18,73-108,110-122,124-152,176-186,188,192-201,203-204,206-213,215,220-224,227-228
+  s_2f2b8a177ba283::t_a4705e37b44734 153-162,164-174
+  s_2f2b8a177ba283::t_5b041c8a21580e 109,123,163,175,214
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "1f2b756a07b3fe81fd7eee196c890bbe41616683",
+  "prompts": {},
+  "sessions": {
+    "s_2f2b8a177ba283": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a04a7c-f938-7500-b20e-0faa6c4019c5",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Florian BRUNIAUX <florian@bruniaux.com>"
+    },
+    "s_a76087f74be2bb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a01f2a-b167-78f0-a126-7450029bd920",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Florian BRUNIAUX <florian@bruniaux.com>"
+    }
+  }
+}
