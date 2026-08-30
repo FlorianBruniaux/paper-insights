@@ -83,10 +83,10 @@ def _reader(tmp_path: Path) -> SqliteFtsSearchReader:
         catalog_revision=CatalogRevision(1),
         chunk_schema_version="chunk-v1",
     )
-    builder = SqliteFtsIndexBuilder(path)
+    builder = SqliteFtsIndexBuilder(path, corpus_root=tmp_path)
     candidate = builder.build_candidate(request)
     builder.publish(candidate, _Lease(CatalogRevision(1)))
-    return SqliteFtsSearchReader(path, _Catalog())
+    return SqliteFtsSearchReader(path, _Catalog(), corpus_root=tmp_path)
 
 
 @pytest.mark.parametrize(

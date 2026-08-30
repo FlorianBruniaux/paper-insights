@@ -3,9 +3,10 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import secrets
 import sqlite3
-import tempfile
 import unicodedata
+from dataclasses import dataclass
 from pathlib import Path
 
 from paper_insights.application.ports.catalog import CatalogRevisionLease
@@ -21,7 +22,31 @@ from paper_insights.domain.retrieval import (
     passage_id,
 )
 
-from .schema import INDEX_SCHEMA_VERSION, SCHEMA_SQL, read_index_receipt
+from .schema import (
+    INDEX_SCHEMA_VERSION,
+    SCHEMA_SQL,
+    assert_safe_directory_binding,
+    assert_safe_file_binding,
+    assert_safe_target,
+    confined_absolute,
+    open_confined_parent,
+    read_index_receipt,
+    read_index_receipt_from_connection,
+    safe_target_exists,
+)
+
+_CREATE_FLAGS = (
+    os.O_CREAT | os.O_EXCL | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
+)
+
+
+@dataclass(slots=True)
+class _CandidateBinding:
+    path: Path
+    filename: str
+    parent_path: Path
+    parent_descriptor: int
+    file_descriptor: int
 
 
 def _normalize(value: str) -> str:
@@ -62,13 +87,21 @@ def passages_for_document(
 
 
 class SqliteFtsIndexBuilder:
-    def __init__(self, published_path: Path) -> None:
-        self._published_path = published_path.expanduser().resolve(strict=False)
-        self._owned_candidates: set[Path] = set()
+    def __init__(self, published_path: Path, *, corpus_root: Path) -> None:
+        self._corpus_root, self._published_path = confined_absolute(corpus_root, published_path)
+        parent_descriptor, filename, _, _ = open_confined_parent(
+            self._corpus_root,
+            self._published_path,
+            create=True,
+        )
+        try:
+            assert_safe_target(parent_descriptor, filename)
+        finally:
+            os.close(parent_descriptor)
+        self._published_name = filename
+        self._owned_candidates: dict[Path, _CandidateBinding] = {}
 
     def build_candidate(self, request: IndexBuildRequest) -> IndexCandidate:
-        parent = self._published_path.parent
-        parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         generation = self._next_generation()
         documents = tuple(
             sorted(
@@ -95,25 +128,24 @@ class SqliteFtsIndexBuilder:
             passage_count=len(passages),
             content_sha256=content_sha256,
         )
-        descriptor, candidate_name = tempfile.mkstemp(
-            prefix=f".{self._published_path.name}.candidate-",
-            suffix=".sqlite3",
-            dir=parent,
-        )
-        candidate_path = Path(candidate_name).resolve()
-        os.close(descriptor)
-        os.chmod(candidate_path, 0o600)
+        binding = self._create_candidate_binding()
+        candidate_path = binding.path
         try:
             self._write_candidate(candidate_path, documents, passages, receipt)
-            self._reject_sidecars(candidate_path)
-            self._fsync_file(candidate_path)
-            actual_receipt = read_index_receipt(candidate_path)
+            self._assert_binding(binding)
+            self._reject_sidecars(binding)
+            os.fsync(binding.file_descriptor)
+            actual_receipt = read_index_receipt(
+                candidate_path,
+                corpus_root=self._corpus_root,
+            )
+            self._assert_binding(binding)
             if actual_receipt != receipt:
                 raise ValueError("search index receipt differs after verification")
-        except BaseException:
-            candidate_path.unlink(missing_ok=True)
+        except BaseException as primary_error:
+            self._cleanup_failed_build(binding, primary_error)
             raise
-        self._owned_candidates.add(candidate_path)
+        self._owned_candidates[candidate_path] = binding
         return IndexCandidate(
             path=candidate_path,
             catalog_revision=request.catalog_revision,
@@ -123,19 +155,36 @@ class SqliteFtsIndexBuilder:
         )
 
     def publish(self, candidate: IndexCandidate, lease: CatalogRevisionLease) -> PublishedIndex:
-        candidate_path = candidate.path.resolve()
-        if candidate_path not in self._owned_candidates:
+        candidate_path = candidate.path
+        binding = self._owned_candidates.get(candidate_path)
+        if binding is None:
             raise ValueError("search index candidate is not owned by this builder")
         if lease.revision != candidate.catalog_revision:
             raise ValueError("revision lease does not match search index candidate")
         if candidate_path.parent != self._published_path.parent:
             raise ValueError("search index candidate is not a sibling of the published index")
-        self._reject_sidecars(candidate_path)
-        if read_index_receipt(candidate_path) != candidate.receipt:
+        self._assert_expected_published_generation(candidate.generation - 1)
+        self._assert_binding(binding)
+        self._reject_sidecars(binding)
+        if read_index_receipt(candidate_path, corpus_root=self._corpus_root) != candidate.receipt:
             raise ValueError("search index candidate changed before publication")
-        os.replace(candidate_path, self._published_path)
-        self._owned_candidates.discard(candidate_path)
-        self._fsync_directory(self._published_path.parent)
+        self._assert_binding(binding)
+        assert_safe_target(binding.parent_descriptor, self._published_name)
+        os.replace(
+            binding.filename,
+            self._published_name,
+            src_dir_fd=binding.parent_descriptor,
+            dst_dir_fd=binding.parent_descriptor,
+        )
+        try:
+            assert_safe_file_binding(
+                binding.parent_descriptor,
+                self._published_name,
+                binding.file_descriptor,
+            )
+            os.fsync(binding.parent_descriptor)
+        finally:
+            self._close_binding(candidate_path, binding)
         return PublishedIndex(
             path=self._published_path,
             catalog_revision=candidate.catalog_revision,
@@ -143,18 +192,123 @@ class SqliteFtsIndexBuilder:
         )
 
     def discard(self, candidate: IndexCandidate) -> None:
-        candidate_path = candidate.path.resolve()
-        if candidate_path not in self._owned_candidates:
+        candidate_path = candidate.path
+        binding = self._owned_candidates.get(candidate_path)
+        if binding is None:
             raise ValueError("search index candidate is not owned by this builder")
-        candidate_path.unlink(missing_ok=True)
-        Path(f"{candidate_path}-wal").unlink(missing_ok=True)
-        Path(f"{candidate_path}-shm").unlink(missing_ok=True)
-        self._owned_candidates.discard(candidate_path)
+        try:
+            self._assert_binding(binding)
+            os.unlink(binding.filename, dir_fd=binding.parent_descriptor)
+            self._unlink_sidecars(binding)
+        finally:
+            self._close_binding(candidate_path, binding)
 
     def _next_generation(self) -> int:
-        if not self._published_path.exists():
+        if not safe_target_exists(self._corpus_root, self._published_path):
             return 1
-        return read_index_receipt(self._published_path).generation + 1
+        return (
+            read_index_receipt(
+                self._published_path,
+                corpus_root=self._corpus_root,
+            ).generation
+            + 1
+        )
+
+    def _assert_expected_published_generation(self, expected: int) -> None:
+        exists = safe_target_exists(self._corpus_root, self._published_path)
+        if expected == 0:
+            if exists:
+                raise ValueError("published search index generation changed")
+            return
+        if not exists:
+            raise ValueError("published search index generation is missing")
+        current = read_index_receipt(
+            self._published_path,
+            corpus_root=self._corpus_root,
+        ).generation
+        if current != expected:
+            raise ValueError(f"published search index generation is {current}, expected {expected}")
+
+    def _create_candidate_binding(self) -> _CandidateBinding:
+        parent_descriptor, _, _, parent_path = open_confined_parent(
+            self._corpus_root,
+            self._published_path,
+            create=True,
+        )
+        for _ in range(128):
+            filename = f".{self._published_name}.candidate-{secrets.token_hex(12)}.sqlite3"
+            try:
+                file_descriptor = os.open(
+                    filename,
+                    _CREATE_FLAGS,
+                    0o600,
+                    dir_fd=parent_descriptor,
+                )
+            except FileExistsError:
+                continue
+            binding = _CandidateBinding(
+                path=parent_path / filename,
+                filename=filename,
+                parent_path=parent_path,
+                parent_descriptor=parent_descriptor,
+                file_descriptor=file_descriptor,
+            )
+            self._assert_binding(binding)
+            return binding
+        os.close(parent_descriptor)
+        raise FileExistsError("could not allocate a private search index candidate")
+
+    @staticmethod
+    def _assert_binding(binding: _CandidateBinding) -> None:
+        assert_safe_directory_binding(binding.parent_descriptor, binding.parent_path)
+        assert_safe_file_binding(
+            binding.parent_descriptor,
+            binding.filename,
+            binding.file_descriptor,
+        )
+
+    def _cleanup_failed_build(
+        self,
+        binding: _CandidateBinding,
+        primary_error: BaseException,
+    ) -> None:
+        try:
+            self._assert_binding(binding)
+            os.unlink(binding.filename, dir_fd=binding.parent_descriptor)
+            self._unlink_sidecars(binding)
+        except BaseException as cleanup_error:
+            primary_error.add_note(
+                f"search candidate cleanup failed: {type(cleanup_error).__name__}"
+            )
+        finally:
+            os.close(binding.file_descriptor)
+            os.close(binding.parent_descriptor)
+
+    def _close_binding(self, path: Path, binding: _CandidateBinding) -> None:
+        self._owned_candidates.pop(path, None)
+        os.close(binding.file_descriptor)
+        os.close(binding.parent_descriptor)
+
+    @staticmethod
+    def _reject_sidecars(binding: _CandidateBinding) -> None:
+        for suffix in ("-wal", "-shm"):
+            try:
+                os.stat(
+                    f"{binding.filename}{suffix}",
+                    dir_fd=binding.parent_descriptor,
+                    follow_symlinks=False,
+                )
+            except FileNotFoundError:
+                continue
+            raise ValueError("closed search index candidate cannot have WAL sidecars")
+
+    @staticmethod
+    def _unlink_sidecars(binding: _CandidateBinding) -> None:
+        for suffix in ("-wal", "-shm"):
+            try:
+                os.unlink(f"{binding.filename}{suffix}", dir_fd=binding.parent_descriptor)
+            except FileNotFoundError:
+                pass
 
     @staticmethod
     def _logical_content_sha256(
@@ -206,6 +360,7 @@ class SqliteFtsIndexBuilder:
     ) -> None:
         connection = sqlite3.connect(path)
         try:
+            connection.row_factory = sqlite3.Row
             journal_mode = connection.execute("PRAGMA journal_mode = DELETE").fetchone()[0]
             if str(journal_mode).lower() != "delete":
                 raise ValueError("search candidate must use journal_mode=DELETE")
@@ -271,30 +426,12 @@ class SqliteFtsIndexBuilder:
                     str(receipt.content_sha256),
                 ),
             )
+            transaction_receipt = read_index_receipt_from_connection(connection)
+            if transaction_receipt != receipt:
+                raise ValueError("search candidate differs before commit")
             connection.commit()
         except BaseException:
             connection.rollback()
             raise
         finally:
             connection.close()
-
-    @staticmethod
-    def _reject_sidecars(path: Path) -> None:
-        if Path(f"{path}-wal").exists() or Path(f"{path}-shm").exists():
-            raise ValueError("closed search index candidate cannot have WAL sidecars")
-
-    @staticmethod
-    def _fsync_file(path: Path) -> None:
-        descriptor = os.open(path, os.O_RDONLY)
-        try:
-            os.fsync(descriptor)
-        finally:
-            os.close(descriptor)
-
-    @staticmethod
-    def _fsync_directory(path: Path) -> None:
-        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
-        try:
-            os.fsync(descriptor)
-        finally:
-            os.close(descriptor)

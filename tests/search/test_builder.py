@@ -1,16 +1,23 @@
 from __future__ import annotations
 
+import shutil
 import sqlite3
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
+from threading import Barrier, Lock
 from types import TracebackType
 from typing import Literal
 from uuid import UUID
 
 import pytest
 
+import paper_insights.adapters.search.sqlite_fts.builder as builder_module
 from paper_insights.adapters.search.sqlite_fts.builder import SqliteFtsIndexBuilder
-from paper_insights.adapters.search.sqlite_fts.schema import read_index_receipt
+from paper_insights.adapters.search.sqlite_fts.schema import (
+    read_index_receipt,
+    read_index_receipt_from_connection,
+)
 from paper_insights.application.research.index import RebuildSearchIndex
 from paper_insights.domain.identifiers import (
     PaperId,
@@ -21,6 +28,7 @@ from paper_insights.domain.identifiers import (
 from paper_insights.domain.retrieval import (
     CatalogRevision,
     IndexBuildRequest,
+    IndexCandidate,
     IndexDocument,
 )
 
@@ -37,8 +45,28 @@ class _Lease:
         exc_type: type[BaseException] | None,
         exc: BaseException | None,
         traceback: TracebackType | None,
-    ) -> bool:
+    ) -> Literal[False]:
         del exc_type, exc, traceback
+        return False
+
+
+class _SerialLease(_Lease):
+    def __init__(self, revision: CatalogRevision, lock: Lock) -> None:
+        super().__init__(revision)
+        self._lock = lock
+
+    def __enter__(self) -> _SerialLease:
+        self._lock.acquire()
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> Literal[False]:
+        del exc_type, exc, traceback
+        self._lock.release()
         return False
 
 
@@ -114,13 +142,13 @@ def _read_pragma(path: Path, pragma: str) -> object:
 
 def test_candidate_is_a_closed_self_describing_single_file(tmp_path: Path) -> None:
     published_path = tmp_path / ".search" / "search-v1.sqlite3"
-    builder = SqliteFtsIndexBuilder(published_path)
+    builder = SqliteFtsIndexBuilder(published_path, corpus_root=tmp_path)
 
     candidate = builder.build_candidate(_request(7))
 
     assert candidate.path.is_absolute()
     assert candidate.path.parent == published_path.parent
-    assert candidate.receipt == read_index_receipt(candidate.path)
+    assert candidate.receipt == read_index_receipt(candidate.path, corpus_root=tmp_path)
     assert candidate.receipt.catalog_revision == CatalogRevision(7)
     assert candidate.receipt.generation == 1
     assert candidate.receipt.document_count == 1
@@ -131,8 +159,29 @@ def test_candidate_is_a_closed_self_describing_single_file(tmp_path: Path) -> No
     assert not Path(f"{candidate.path}-shm").exists()
 
 
+def test_builder_refuses_an_index_parent_symlink_or_path_outside_corpus_root(
+    tmp_path: Path,
+) -> None:
+    corpus_root = tmp_path / "corpus"
+    outside = tmp_path / "outside"
+    corpus_root.mkdir()
+    outside.mkdir()
+    (corpus_root / "search-link").symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(ValueError, match=r"confined|symbolic"):
+        SqliteFtsIndexBuilder(
+            corpus_root / "search-link" / "search.sqlite3",
+            corpus_root=corpus_root,
+        )
+    with pytest.raises(ValueError, match="confined"):
+        SqliteFtsIndexBuilder(outside / "search.sqlite3", corpus_root=corpus_root)
+
+
 def test_same_logical_snapshot_has_the_same_content_digest(tmp_path: Path) -> None:
-    builder = SqliteFtsIndexBuilder(tmp_path / "search-v1.sqlite3")
+    builder = SqliteFtsIndexBuilder(
+        tmp_path / "search-v1.sqlite3",
+        corpus_root=tmp_path,
+    )
 
     first = builder.build_candidate(_request(4))
     second = builder.build_candidate(_request(4))
@@ -143,7 +192,7 @@ def test_same_logical_snapshot_has_the_same_content_digest(tmp_path: Path) -> No
 
 def test_publish_replaces_only_after_revision_lease_is_valid(tmp_path: Path) -> None:
     published_path = tmp_path / "search-v1.sqlite3"
-    builder = SqliteFtsIndexBuilder(published_path)
+    builder = SqliteFtsIndexBuilder(published_path, corpus_root=tmp_path)
     candidate = builder.build_candidate(_request(3))
 
     with pytest.raises(ValueError, match="revision lease"):
@@ -156,14 +205,17 @@ def test_publish_replaces_only_after_revision_lease_is_valid(tmp_path: Path) -> 
 
     assert published.path == published_path.resolve()
     assert not candidate.path.exists()
-    assert read_index_receipt(published_path).catalog_revision == CatalogRevision(3)
+    assert read_index_receipt(
+        published_path,
+        corpus_root=tmp_path,
+    ).catalog_revision == CatalogRevision(3)
 
 
 def test_publish_rejects_logical_content_tampered_after_candidate_verification(
     tmp_path: Path,
 ) -> None:
     published_path = tmp_path / "search-v1.sqlite3"
-    builder = SqliteFtsIndexBuilder(published_path)
+    builder = SqliteFtsIndexBuilder(published_path, corpus_root=tmp_path)
     candidate = builder.build_candidate(_request(3))
     connection = sqlite3.connect(candidate.path)
     try:
@@ -179,18 +231,69 @@ def test_publish_rejects_logical_content_tampered_after_candidate_verification(
     assert not published_path.exists()
 
 
+def test_publish_rejects_candidate_symlink_swap_after_content_validation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    published_path = tmp_path / "search-v1.sqlite3"
+    builder = SqliteFtsIndexBuilder(published_path, corpus_root=tmp_path)
+    candidate = builder.build_candidate(_request(3))
+    attacker = tmp_path / "attacker.sqlite3"
+    shutil.copyfile(candidate.path, attacker)
+    real_read_receipt = builder_module.read_index_receipt
+
+    def swap_after_validation(path: Path, *args: object, **kwargs: object) -> object:
+        receipt = real_read_receipt(path, *args, **kwargs)
+        if path == candidate.path:
+            candidate.path.unlink()
+            candidate.path.symlink_to(attacker)
+        return receipt
+
+    monkeypatch.setattr(builder_module, "read_index_receipt", swap_after_validation)
+
+    with pytest.raises(ValueError, match=r"binding|symbolic"):
+        builder.publish(candidate, _Lease(CatalogRevision(3)))
+
+    assert not published_path.exists()
+    assert candidate.path.is_symlink()
+
+
+def test_publish_rejects_parent_directory_swap_after_candidate_validation(
+    tmp_path: Path,
+) -> None:
+    published_path = tmp_path / "search" / "search-v1.sqlite3"
+    builder = SqliteFtsIndexBuilder(published_path, corpus_root=tmp_path)
+    candidate = builder.build_candidate(_request(3))
+    original_parent = tmp_path / "original-search"
+    published_path.parent.rename(original_parent)
+    published_path.parent.mkdir()
+
+    with pytest.raises(ValueError, match="parent binding changed"):
+        builder.publish(candidate, _Lease(CatalogRevision(3)))
+
+    assert not published_path.exists()
+    assert (original_parent / candidate.path.name).exists()
+
+    published_path.parent.rmdir()
+    original_parent.rename(published_path.parent)
+    builder.discard(candidate)
+
+
 def test_injected_replace_crash_preserves_previously_published_index(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     published_path = tmp_path / "search-v1.sqlite3"
-    builder = SqliteFtsIndexBuilder(published_path)
+    builder = SqliteFtsIndexBuilder(published_path, corpus_root=tmp_path)
     first = builder.build_candidate(_request(1, title="Published evidence"))
     builder.publish(first, _Lease(CatalogRevision(1)))
     previous_bytes = published_path.read_bytes()
     next_candidate = builder.build_candidate(_request(2, title="Candidate evidence"))
 
-    def crash_before_replace(source: Path, destination: Path) -> None:
-        del source, destination
+    def crash_before_replace(
+        source: Path | str,
+        destination: Path | str,
+        **options: object,
+    ) -> None:
+        del source, destination, options
         raise OSError("injected publication crash")
 
     monkeypatch.setattr(
@@ -202,7 +305,10 @@ def test_injected_replace_crash_preserves_previously_published_index(
         builder.publish(next_candidate, _Lease(CatalogRevision(2)))
 
     assert published_path.read_bytes() == previous_bytes
-    assert read_index_receipt(published_path).catalog_revision == CatalogRevision(1)
+    assert read_index_receipt(
+        published_path,
+        corpus_root=tmp_path,
+    ).catalog_revision == CatalogRevision(1)
     assert next_candidate.path.exists()
 
     builder.discard(next_candidate)
@@ -210,12 +316,106 @@ def test_injected_replace_crash_preserves_previously_published_index(
     assert published_path.exists()
 
 
+def test_concurrent_candidates_with_same_next_generation_cannot_both_publish(
+    tmp_path: Path,
+) -> None:
+    published_path = tmp_path / "search-v1.sqlite3"
+    initial_builder = SqliteFtsIndexBuilder(published_path, corpus_root=tmp_path)
+    initial = initial_builder.build_candidate(_request(1))
+    initial_builder.publish(initial, _Lease(CatalogRevision(1)))
+    first_builder = SqliteFtsIndexBuilder(published_path, corpus_root=tmp_path)
+    second_builder = SqliteFtsIndexBuilder(published_path, corpus_root=tmp_path)
+    first = first_builder.build_candidate(_request(2, title="First generation two"))
+    second = second_builder.build_candidate(_request(2, title="Second generation two"))
+    contenders = ((first_builder, first), (second_builder, second))
+    start = Barrier(2)
+    publication_lock = Lock()
+
+    def publish_contender(
+        builder: SqliteFtsIndexBuilder,
+        candidate: IndexCandidate,
+    ) -> BaseException | None:
+        start.wait()
+        try:
+            with _SerialLease(CatalogRevision(2), publication_lock) as lease:
+                builder.publish(candidate, lease)
+        except BaseException as error:
+            return error
+        return None
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        outcomes = tuple(
+            executor.map(
+                lambda contender: publish_contender(*contender),
+                contenders,
+            )
+        )
+
+    assert sum(outcome is None for outcome in outcomes) == 1
+    failures = tuple(outcome for outcome in outcomes if outcome is not None)
+    assert len(failures) == 1
+    assert isinstance(failures[0], ValueError)
+    assert "generation" in str(failures[0])
+    assert read_index_receipt(published_path, corpus_root=tmp_path).generation == 2
+    for (builder, candidate), outcome in zip(contenders, outcomes, strict=True):
+        if outcome is not None:
+            builder.discard(candidate)
+
+
+def test_candidate_integrity_is_checked_inside_the_write_transaction_before_commit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    observed_transaction_states: list[bool] = []
+
+    def observe(connection: sqlite3.Connection) -> object:
+        observed_transaction_states.append(connection.in_transaction)
+        return read_index_receipt_from_connection(connection)
+
+    monkeypatch.setattr(builder_module, "read_index_receipt_from_connection", observe)
+    builder = SqliteFtsIndexBuilder(
+        tmp_path / "search-v1.sqlite3",
+        corpus_root=tmp_path,
+    )
+
+    builder.build_candidate(_request(4))
+
+    assert observed_transaction_states == [True]
+
+
+def test_precommit_counter_mismatch_rolls_back_and_removes_candidate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    real_read_receipt = read_index_receipt_from_connection
+
+    def corrupt_fts_counter(connection: sqlite3.Connection) -> object:
+        assert connection.in_transaction is True
+        connection.execute("DELETE FROM paper_fts")
+        return real_read_receipt(connection)
+
+    monkeypatch.setattr(
+        builder_module,
+        "read_index_receipt_from_connection",
+        corrupt_fts_counter,
+    )
+    published_path = tmp_path / "search-v1.sqlite3"
+    builder = SqliteFtsIndexBuilder(published_path, corpus_root=tmp_path)
+
+    with pytest.raises(ValueError, match="document counters disagree"):
+        builder.build_candidate(_request(4))
+
+    assert not published_path.exists()
+    assert tuple(tmp_path.glob("*.candidate-*.sqlite3")) == ()
+
+
 def test_rebuild_uses_one_snapshot_then_publishes_under_its_revision_guard(
     tmp_path: Path,
 ) -> None:
     request = _request(9)
     snapshot = _Snapshot(request)
-    builder = SqliteFtsIndexBuilder(tmp_path / "search-v1.sqlite3")
+    builder = SqliteFtsIndexBuilder(
+        tmp_path / "search-v1.sqlite3",
+        corpus_root=tmp_path,
+    )
     service = RebuildSearchIndex(
         catalog=_Reader(snapshot),
         builder=builder,
@@ -226,14 +426,17 @@ def test_rebuild_uses_one_snapshot_then_publishes_under_its_revision_guard(
 
     assert snapshot.closed is True
     assert published.catalog_revision == CatalogRevision(9)
-    assert read_index_receipt(published.path).catalog_revision == CatalogRevision(9)
+    assert read_index_receipt(
+        published.path,
+        corpus_root=tmp_path,
+    ).catalog_revision == CatalogRevision(9)
 
 
 def test_rebuild_discards_stale_candidate_without_touching_published_index(
     tmp_path: Path,
 ) -> None:
     published_path = tmp_path / "search-v1.sqlite3"
-    builder = SqliteFtsIndexBuilder(published_path)
+    builder = SqliteFtsIndexBuilder(published_path, corpus_root=tmp_path)
     initial = builder.build_candidate(_request(1))
     builder.publish(initial, _Lease(CatalogRevision(1)))
     previous_bytes = published_path.read_bytes()
@@ -253,7 +456,10 @@ def test_rebuild_discards_stale_candidate_without_touching_published_index(
 def test_rebuild_does_not_mask_stale_revision_when_candidate_cleanup_also_fails(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    builder = SqliteFtsIndexBuilder(tmp_path / "search-v1.sqlite3")
+    builder = SqliteFtsIndexBuilder(
+        tmp_path / "search-v1.sqlite3",
+        corpus_root=tmp_path,
+    )
     service = RebuildSearchIndex(
         catalog=_Reader(_Snapshot(_request(2))),
         builder=builder,

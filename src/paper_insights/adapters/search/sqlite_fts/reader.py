@@ -26,7 +26,12 @@ from paper_insights.domain.retrieval import (
     PassageView,
 )
 
-from .schema import open_readonly, read_index_receipt_from_connection
+from .schema import (
+    confined_absolute,
+    open_readonly,
+    read_index_receipt_from_connection,
+    safe_target_exists,
+)
 
 _SEARCH_TOKEN = re.compile(r"\w+", re.UNICODE)
 
@@ -37,18 +42,20 @@ class SqliteFtsSearchReader:
         index_path: Path,
         catalog: CatalogReader,
         *,
+        corpus_root: Path,
         maximum_excerpt_characters: int = 1_500,
     ) -> None:
         if not 1 <= maximum_excerpt_characters <= 1_500:
             raise ValueError("maximum search excerpt must be between 1 and 1500 characters")
-        self._index_path = index_path.expanduser().resolve(strict=False)
+        self._corpus_root, self._index_path = confined_absolute(corpus_root, index_path)
+        safe_target_exists(self._corpus_root, self._index_path)
         self._catalog = catalog
         self._maximum_excerpt_characters = maximum_excerpt_characters
 
     def search_papers(self, query: PaperSearchQuery) -> PaperSearchResult:
         self._reject_filters(query.filters)
         catalog_revision = self._catalog_revision()
-        if not self._index_path.exists():
+        if not safe_target_exists(self._corpus_root, self._index_path):
             return PaperSearchResult(
                 hits=(),
                 coverage=CoverageStatus.UNAVAILABLE,
@@ -60,7 +67,7 @@ class SqliteFtsSearchReader:
                 applied_limit=query.limit,
             )
         expression = self._fts_expression(query.query)
-        with open_readonly(self._index_path) as connection:
+        with open_readonly(self._index_path, corpus_root=self._corpus_root) as connection:
             receipt = read_index_receipt_from_connection(connection)
             rows: list[sqlite3.Row]
             if expression is None:
@@ -110,7 +117,7 @@ class SqliteFtsSearchReader:
     def search_passages(self, query: PassageSearchQuery) -> PassageSearchResult:
         self._reject_filters(query.filters)
         catalog_revision = self._catalog_revision()
-        if not self._index_path.exists():
+        if not safe_target_exists(self._corpus_root, self._index_path):
             return PassageSearchResult(
                 hits=(),
                 coverage=CoverageStatus.UNAVAILABLE,
@@ -123,7 +130,7 @@ class SqliteFtsSearchReader:
             )
         expression = self._fts_expression(query.query)
         tokens = self._tokens(query.query)
-        with open_readonly(self._index_path) as connection:
+        with open_readonly(self._index_path, corpus_root=self._corpus_root) as connection:
             receipt = read_index_receipt_from_connection(connection)
             rows: list[sqlite3.Row]
             if expression is None:
@@ -168,9 +175,9 @@ class SqliteFtsSearchReader:
         )
 
     def get_passage(self, passage_id: PassageId) -> PassageView | None:
-        if not self._index_path.exists():
+        if not safe_target_exists(self._corpus_root, self._index_path):
             return None
-        with open_readonly(self._index_path) as connection:
+        with open_readonly(self._index_path, corpus_root=self._corpus_root) as connection:
             read_index_receipt_from_connection(connection)
             row = connection.execute(
                 "SELECT passage_id, paper_id, paper_version_id, version_observation_id, "

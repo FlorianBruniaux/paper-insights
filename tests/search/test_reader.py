@@ -96,7 +96,7 @@ def _published_index(tmp_path: Path, *, revision: int = 5) -> Path:
         catalog_revision=CatalogRevision(revision),
         chunk_schema_version="chunk-v1",
     )
-    builder = SqliteFtsIndexBuilder(path)
+    builder = SqliteFtsIndexBuilder(path, corpus_root=tmp_path)
     candidate = builder.build_candidate(request)
     builder.publish(candidate, _Lease(CatalogRevision(revision)))
     return path
@@ -106,7 +106,7 @@ def test_paper_search_returns_stable_rank_raw_score_revisions_and_counts(
     tmp_path: Path,
 ) -> None:
     path = _published_index(tmp_path)
-    reader = SqliteFtsSearchReader(path, _Catalog(5))
+    reader = SqliteFtsSearchReader(path, _Catalog(5), corpus_root=tmp_path)
     query = PaperSearchQuery(query="evaluation evidence", limit=1)
 
     first = reader.search_papers(query)
@@ -130,7 +130,12 @@ def test_passage_search_and_lookup_preserve_exact_identity_with_bounded_excerpt(
     tmp_path: Path,
 ) -> None:
     path = _published_index(tmp_path)
-    reader = SqliteFtsSearchReader(path, _Catalog(5), maximum_excerpt_characters=24)
+    reader = SqliteFtsSearchReader(
+        path,
+        _Catalog(5),
+        corpus_root=tmp_path,
+        maximum_excerpt_characters=24,
+    )
 
     result = reader.search_passages(PassageSearchQuery(query="provenance", limit=10))
 
@@ -147,7 +152,7 @@ def test_passage_search_and_lookup_preserve_exact_identity_with_bounded_excerpt(
 
 def test_stale_index_reports_partial_coverage_without_hiding_hits(tmp_path: Path) -> None:
     path = _published_index(tmp_path, revision=5)
-    reader = SqliteFtsSearchReader(path, _Catalog(6))
+    reader = SqliteFtsSearchReader(path, _Catalog(6), corpus_root=tmp_path)
 
     result = reader.search_papers(PaperSearchQuery(query="biology"))
 
@@ -159,7 +164,7 @@ def test_stale_index_reports_partial_coverage_without_hiding_hits(tmp_path: Path
 
 def test_missing_index_is_unavailable_and_is_not_created(tmp_path: Path) -> None:
     path = tmp_path / "missing.sqlite3"
-    reader = SqliteFtsSearchReader(path, _Catalog(4))
+    reader = SqliteFtsSearchReader(path, _Catalog(4), corpus_root=tmp_path)
 
     result = reader.search_papers(PaperSearchQuery(query="evidence"))
 
@@ -170,10 +175,24 @@ def test_missing_index_is_unavailable_and_is_not_created(tmp_path: Path) -> None
     assert not path.exists()
 
 
+def test_reader_refuses_outside_root_and_symlink_index_paths(tmp_path: Path) -> None:
+    corpus_root = tmp_path / "corpus"
+    outside = tmp_path / "outside.sqlite3"
+    corpus_root.mkdir()
+    outside.write_bytes(b"not an index")
+    linked_index = corpus_root / "linked.sqlite3"
+    linked_index.symlink_to(outside)
+
+    with pytest.raises(ValueError, match="confined"):
+        SqliteFtsSearchReader(outside, _Catalog(4), corpus_root=corpus_root)
+    with pytest.raises(ValueError, match="symbolic"):
+        SqliteFtsSearchReader(linked_index, _Catalog(4), corpus_root=corpus_root)
+
+
 def test_search_database_connection_is_read_only_and_query_only(tmp_path: Path) -> None:
     path = _published_index(tmp_path)
 
-    with open_readonly(path) as connection:
+    with open_readonly(path, corpus_root=tmp_path) as connection:
         assert connection.execute("PRAGMA query_only").fetchone()[0] == 1
         with pytest.raises(sqlite3.OperationalError, match="readonly"):
             connection.execute("CREATE TABLE forbidden (id INTEGER)")
@@ -188,7 +207,7 @@ def test_reader_rejects_an_index_with_an_unknown_self_described_schema(tmp_path:
     finally:
         connection.close()
 
-    reader = SqliteFtsSearchReader(path, _Catalog(5))
+    reader = SqliteFtsSearchReader(path, _Catalog(5), corpus_root=tmp_path)
 
     with pytest.raises(ValueError, match="unsupported search index schema"):
         reader.search_papers(PaperSearchQuery(query="evidence"))
@@ -198,7 +217,7 @@ def test_application_search_service_preserves_reader_results_and_passage_ids(
     tmp_path: Path,
 ) -> None:
     path = _published_index(tmp_path)
-    service = LocalSearch(SqliteFtsSearchReader(path, _Catalog(5)))
+    service = LocalSearch(SqliteFtsSearchReader(path, _Catalog(5), corpus_root=tmp_path))
 
     papers = service.search_papers(PaperSearchQuery(query="provenance"))
     passages = service.search_passages(PassageSearchQuery(query="provenance"))
