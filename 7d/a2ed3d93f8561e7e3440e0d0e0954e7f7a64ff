@@ -1,0 +1,59 @@
+src/paper_insights/application/diagnostics.py
+  s_2f2b8a177ba283::t_35d5940cb32d5f 13-16,92-95,104-112,136-141
+  s_2f2b8a177ba283::t_43b56d1ad66680 142-143
+tests/cli/test_doctor.py
+  s_2f2b8a177ba283::t_2bcae2d6066fb5 267-269
+  s_2f2b8a177ba283::t_15179e15bda520 499-520
+  s_2f2b8a177ba283::t_b5221e2fd53a98 5,13,255-266,270-277,290-301,305-328,394-498
+  s_2f2b8a177ba283::t_098912f9ec3c10 329-360
+  s_2f2b8a177ba283::t_9fbdce001c0081 278-289
+  s_2f2b8a177ba283::t_26a9131f736b77 302-304
+  s_2f2b8a177ba283::t_98996a8335f6da 521-552
+  s_2f2b8a177ba283::t_759069be6c666e 361-393
+tests/artifacts/test_store.py
+  s_2f2b8a177ba283::t_a9f11cc94dc9ef 192-219
+  s_2f2b8a177ba283::t_9fd3fa3f2447bc 117-146
+  s_2f2b8a177ba283::t_7a9cbf4b2bdc19 350-379
+  s_2f2b8a177ba283::t_098912f9ec3c10 249-260
+  s_2f2b8a177ba283::t_12c3d640778c94 14,247-248,261-286
+  s_2f2b8a177ba283::t_c7b1cd69268385 348-349,380-405
+  s_2f2b8a177ba283::t_7b5f219b3362bf 289-319
+  s_2f2b8a177ba283::t_94ff9e40595131 287-288,320-347
+src/paper_insights/adapters/diagnostics/sqlite.py
+  s_2f2b8a177ba283::t_f0e980231078f4 108
+  s_2f2b8a177ba283::t_35d5940cb32d5f 5,64-66,81-87,91,99,132,141-142,170-173,178-184
+  s_2f2b8a177ba283::t_3e33777cb4591a 117-120,185-200
+  s_2f2b8a177ba283::t_73c8fc35f736aa 92,123-124,126-131,152-161
+  s_2f2b8a177ba283::t_4415ac6df76f7e 3,13-14,90,94-98,122,125,133-140,143-148,162-169,174-177
+  s_2f2b8a177ba283::t_8e990b22071052 149-151
+  s_2f2b8a177ba283::t_1dc126900c24b3 15
+src/paper_insights/adapters/artifacts/filesystem/store.py
+  s_2f2b8a177ba283::t_2ceddd8f9e80cb 174,177-178,180-181
+  s_2f2b8a177ba283::t_dc7b97444a3dc6 346-348,354-355
+  s_2f2b8a177ba283::t_dd8cdd33fdecb3 175-176,179,182-183
+  s_2f2b8a177ba283::t_97d0ee6b36f58b 118-124
+  s_2f2b8a177ba283::t_e8f876481d5e2e 92-98,399
+  s_2f2b8a177ba283::t_34af00986556ae 155,158-160
+  s_2f2b8a177ba283::t_a49364fff526b2 244-246
+  s_2f2b8a177ba283::t_35d5940cb32d5f 11,73-81,84-91,99-104,115-117,125-138,141-154,156-157,161-173,184-190,336-337,339,384-398,400-406
+  s_2f2b8a177ba283::t_7d34b8afdb40ab 240-242
+  s_2f2b8a177ba283::t_98021a503ea3a6 264-265,267-268,270
+  s_2f2b8a177ba283::t_660b1206b5f3da 362-370
+  s_2f2b8a177ba283::t_66cc7690ada159 191
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "7da2ed3d93f8561e7e3440e0d0e0954e7f7a64ff",
+  "prompts": {},
+  "sessions": {
+    "s_2f2b8a177ba283": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a04a7c-f938-7500-b20e-0faa6c4019c5",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Florian BRUNIAUX <florian@bruniaux.com>"
+    }
+  }
+}
