@@ -1,0 +1,22 @@
+src/paper_insights/domain/retrieval.py
+  s_2f2b8a177ba283::t_90b13bcedfeced 126-127
+tests/domain/test_contract_shapes.py
+  s_2f2b8a177ba283::t_88ba1179affb66 163-167
+  s_2f2b8a177ba283::t_ce0a63589eaa31 168-169
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "b520a088ffbc476d02e01293d8e452d110a90d74",
+  "prompts": {},
+  "sessions": {
+    "s_2f2b8a177ba283": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a04a7c-f938-7500-b20e-0faa6c4019c5",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Florian BRUNIAUX <florian@bruniaux.com>"
+    }
+  }
+}
