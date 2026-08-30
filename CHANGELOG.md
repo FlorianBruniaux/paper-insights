@@ -36,6 +36,7 @@ Toutes les modifications notables du projet sont consignées ici.
 - CLI date filters accept documented UTC dates with inclusive day bounds, interrupted-run repair defaults to a 24-hour stale window, and interactive ingestion confirms the exact prepared manifest while non-interactive execution still requires `--yes`.
 - Catalog snapshots now use immutable descriptor-bound reads and fail closed on active WAL or SHM sidecars, so repair previews do not create corpus files.
 - Catalog snapshots now materialize a validated in-memory image before exposing a revision, preventing later concurrent writes from mixing newer rows with that revision while keeping previews free of corpus sidecars.
+- CLI success envelopes now validate closed, operation-specific nested data models, and terminal passage search exposes the same revisions, coverage, counters and hit provenance as JSON output.
 - Exit code 4 now explicitly covers any completed ingestion run with recorded item errors, including both `partial` and `failed` statuses.
 - `docs/DEVELOPMENT.md` et l'ancien plan vertical pointent désormais vers le plan complet comme seule autorité d'exécution.
 - `doctor` est spécifié strictement read-only; la récupération passe par `repair interrupted-runs --yes`.
