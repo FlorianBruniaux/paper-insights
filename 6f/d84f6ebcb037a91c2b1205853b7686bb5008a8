@@ -1,0 +1,21 @@
+tests/providers/test_arxiv_normalizer.py
+  s_2f2b8a177ba283::t_994b39bae6adb8 5,10,36-69
+src/paper_insights/adapters/providers/arxiv/normalizer.py
+  s_2f2b8a177ba283::t_b699462c1704c1 69-73
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "6fd84f6ebcb037a91c2b1205853b7686bb5008a8",
+  "prompts": {},
+  "sessions": {
+    "s_2f2b8a177ba283": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a04a7c-f938-7500-b20e-0faa6c4019c5",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Florian BRUNIAUX <florian@bruniaux.com>"
+    }
+  }
+}
