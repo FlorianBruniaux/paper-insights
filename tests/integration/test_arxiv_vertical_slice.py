@@ -4,7 +4,7 @@ import io
 import json
 import sqlite3
 from collections import deque
-from contextlib import nullcontext
+from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
@@ -15,7 +15,6 @@ from alembic.config import Config
 from pydantic import ValidationError
 
 from alembic import command
-from paper_insights.application.ingestion.repair import InterruptedRunsPreview
 from paper_insights.bootstrap import (
     citation_service,
     collections_service,
@@ -27,7 +26,7 @@ from paper_insights.bootstrap import (
     search_service,
 )
 from paper_insights.interfaces.cli.app import run
-from paper_insights.interfaces.cli.envelopes import CliEnvelope
+from paper_insights.interfaces.cli.envelopes import CliEnvelope, CliErrorEnvelope
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = ROOT / "tests" / "fixtures" / "arxiv"
@@ -46,17 +45,6 @@ class _Ids:
 
     def new(self) -> UUID:
         return self._values.popleft()
-
-
-class _PreviewOnlyRepair:
-    def preview(self) -> InterruptedRunsPreview:
-        return InterruptedRunsPreview(
-            cutoff=datetime(2026, 8, 29, 7, 0, tzinfo=UTC),
-            candidates=(),
-        )
-
-    def execute(self, *_args: object, **_kwargs: object) -> object:
-        raise AssertionError("unconfirmed repair attempted a mutation")
 
 
 def _migrate(database: Path) -> None:
@@ -85,6 +73,14 @@ def test_missing_catalog_fails_closed_without_initializing_it(tmp_path: Path) ->
 
 
 def test_repair_requires_confirmation_after_read_only_preview(tmp_path: Path) -> None:
+    data_root = tmp_path / "corpus"
+    data_root.mkdir()
+    catalog = data_root / "catalog.sqlite3"
+    _migrate(catalog)
+    wal = catalog.with_name(catalog.name + "-wal")
+    shm = catalog.with_name(catalog.name + "-shm")
+    assert not wal.exists()
+    assert not shm.exists()
     stdout = io.StringIO()
     stderr = io.StringIO()
 
@@ -97,10 +93,8 @@ def test_repair_requires_confirmation_after_read_only_preview(tmp_path: Path) ->
         doctor_service_factory=lambda _settings: (_ for _ in ()).throw(
             AssertionError("repair called doctor")
         ),
-        repair_service_factory=lambda _settings, age: nullcontext(
-            _PreviewOnlyRepair() if age == 86_400 else None  # type: ignore[arg-type]
-        ),
-        environ={"PAPER_INSIGHTS_DATA_ROOT": str(tmp_path / "absent")},
+        repair_service_factory=repair_service,
+        environ={"PAPER_INSIGHTS_DATA_ROOT": str(data_root)},
         stdout=stdout,
         stderr=stderr,
     )
@@ -108,6 +102,8 @@ def test_repair_requires_confirmation_after_read_only_preview(tmp_path: Path) ->
     assert code == 3
     assert stderr.getvalue() == ""
     assert json.loads(stdout.getvalue())["data"]["candidates"] == []
+    assert not wal.exists()
+    assert not shm.exists()
 
 
 def test_ingest_preview_needs_no_catalog_and_creates_nothing(tmp_path: Path) -> None:
@@ -209,7 +205,7 @@ def test_cli_envelope_forbids_extra_fields_and_unknown_operations() -> None:
     valid = {
         "schema_version": "paper-insights.cli.v1",
         "operation": "discover",
-        "data": {},
+        "data": {"preview": {}, "records": []},
         "coverage": {"status": "complete"},
         "errors": [],
         "truncated": False,
@@ -220,6 +216,26 @@ def test_cli_envelope_forbids_extra_fields_and_unknown_operations() -> None:
         CliEnvelope.model_validate({**valid, "operation": "unknown"})
     with pytest.raises(ValidationError):
         CliEnvelope.model_validate({**valid, "unexpected": True})
+    with pytest.raises(ValidationError):
+        CliEnvelope.model_validate({**valid, "data": {"preview": {}, "records": [], "x": 1}})
+    with pytest.raises(ValidationError):
+        CliEnvelope.model_validate(
+            {**valid, "data": {"preview": {"path": Path("x")}, "records": []}}
+        )
+    with pytest.raises(ValidationError):
+        CliErrorEnvelope.model_validate(
+            {"schema_version": "paper-insights.error.v1", "error": {"code": "made_up"}}
+        )
+
+    partial = CliEnvelope.model_validate(
+        {
+            **valid,
+            "operation": "ingest",
+            "data": {"run_id": "run", "counters": {}},
+            "errors": [{"code": "ingestion_items_failed", "count": 1}],
+        }
+    )
+    assert partial.errors[0].count == 1
 
 
 def test_offline_arxiv_cli_preserves_versions_and_provenance(tmp_path: Path) -> None:
@@ -241,11 +257,12 @@ def test_offline_arxiv_cli_preserves_versions_and_provenance(tmp_path: Path) -> 
         query = request.url.params.get("search_query", "")
         if "hostile-conflict" in query:
             payload = (
-                (FIXTURES / "revision-v2.xml")
+                (FIXTURES / "page-1.xml")
                 .read_bytes()
                 .replace(
-                    b"2608.01234",
-                    b"2608.05678",
+                    b'    <category term="cs.DB" />\n',
+                    b'    <category term="cs.DB" />\n'
+                    b"    <arxiv:doi>10.1234/example.1</arxiv:doi>\n",
                 )
             )
             return httpx.Response(200, content=payload, request=request)
@@ -349,16 +366,36 @@ def test_offline_arxiv_cli_preserves_versions_and_provenance(tmp_path: Path) -> 
     ]
     assert listed["data"]["collections"][0]["paper_count"] == 1  # type: ignore[index]
 
+    refreshed_code, refreshed_search, refreshed_error = invoke(
+        ["search", "papers", "Revised", "--limit", "5", "--json"]
+    )
     terminal_code, terminal_search, terminal_error = invoke(
         ["search", "papers", "Revised", "--limit", "5"]
     )
-    assert terminal_code == 0
-    assert terminal_error == ""
+    assert (refreshed_code, terminal_code) == (0, 0)
+    assert refreshed_error == terminal_error == ""
     assert "source=arxiv" in terminal_search["text"]  # type: ignore[operator]
     assert "authors=[Alice Example, Bob Researcher]" in terminal_search["text"]  # type: ignore[operator]
     assert "doi:10.1234/example.1 [paper]" in terminal_search["text"]  # type: ignore[operator]
+    assert f"paper_id={searched['data']['hits'][0]['paper_id']}" in terminal_search["text"]  # type: ignore[index,operator]
+    assert (
+        f"paper_version_id={searched['data']['hits'][0]['paper_version_id']}"
+        in terminal_search["text"]  # type: ignore[index,operator]
+    )
+    assert "bm25_score=" in terminal_search["text"]  # type: ignore[operator]
+    assert "artifact_sha256=" in terminal_search["text"]  # type: ignore[operator]
+    assert "catalog_revision=" in terminal_search["text"]  # type: ignore[operator]
+    assert "index_revision=" in terminal_search["text"]  # type: ignore[operator]
+    assert (
+        f"coverage={refreshed_search['coverage']['status']}" in terminal_search["text"]  # type: ignore[index,operator]
+    )
+    assert f"returned={refreshed_search['returned']}" in terminal_search["text"]  # type: ignore[operator]
+    assert f"available={refreshed_search['available']}" in terminal_search["text"]  # type: ignore[operator]
+    assert (
+        f"truncated={str(refreshed_search['truncated']).lower()}" in terminal_search["text"]  # type: ignore[operator]
+    )
 
-    with sqlite3.connect(data_root / "catalog.sqlite3") as connection:
+    with closing(sqlite3.connect(data_root / "catalog.sqlite3")) as connection:
         paper_count = connection.execute("SELECT count(*) FROM papers").fetchone()[0]
         version_count = connection.execute("SELECT count(*) FROM paper_versions").fetchone()[0]
         v1_title = connection.execute(
@@ -440,14 +477,33 @@ def test_offline_arxiv_cli_preserves_versions_and_provenance(tmp_path: Path) -> 
     assert "Revised" not in v1_citation["data"]["content"]  # type: ignore[index,operator]
 
     conflict_code, conflict, conflict_error = invoke(
-        ["ingest", "arxiv", "hostile-conflict", "--limit", "1", "--yes", "--json"]
+        ["ingest", "arxiv", "hostile-conflict", "--limit", "2", "--yes", "--json"]
     )
     assert conflict_code == 4
     assert conflict_error == ""
+    assert conflict["data"]["counters"]["status"] == "partial"  # type: ignore[index]
+    assert conflict["data"]["counters"]["unchanged_records"] == 1  # type: ignore[index]
     assert conflict["data"]["counters"]["failed_records"] == 1  # type: ignore[index]
-    with sqlite3.connect(data_root / "catalog.sqlite3") as connection:
+    assert conflict["errors"] == [{"code": "ingestion_items_failed", "count": 1}]
+    with closing(sqlite3.connect(data_root / "catalog.sqlite3")) as connection:
         assert connection.execute("SELECT count(*) FROM paper_versions").fetchone()[0] == 3
         assert connection.execute("SELECT count(*) FROM collection_errors").fetchone()[0] == 1
+        run_id = conflict["data"]["run_id"]  # type: ignore[index]
+        items = connection.execute(
+            "SELECT record_ordinal, outcome FROM ingestion_run_items "
+            "WHERE run_id = ? ORDER BY record_ordinal",
+            (run_id,),
+        ).fetchall()
+        assert items == [(0, "unchanged"), (1, "failed")]
+        linked_error = connection.execute(
+            "SELECT count(*) FROM collection_errors AS ce "
+            "JOIN ingestion_run_items AS iri ON iri.run_id = ce.run_id "
+            "AND iri.source_snapshot_id = ce.source_snapshot_id "
+            "AND iri.record_ordinal = ce.record_ordinal "
+            "WHERE ce.run_id = ? AND iri.outcome = 'failed'",
+            (run_id,),
+        ).fetchone()[0]
+        assert linked_error == 1
         assert (
             connection.execute(
                 "SELECT is_current FROM paper_versions WHERE id = ?",

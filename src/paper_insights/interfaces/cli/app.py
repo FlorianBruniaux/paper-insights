@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import sys
 from collections.abc import Callable, Mapping, Sequence
@@ -170,11 +169,7 @@ def run(
             environ=os.environ if environ is None else environ,
         )
     except SettingsError:
-        error = {
-            "error": {"code": "invalid_configuration"},
-            "schema_version": "paper-insights.error.v1",
-        }
-        error_output.write(json.dumps(error, sort_keys=True) + "\n")
+        _write_error(error_output, "invalid_configuration")
         return int(ExitCode.INVALID)
 
     if arguments.command == "doctor":
@@ -227,9 +222,21 @@ def run(
                     data=ingestion_data(summary),
                     as_json=arguments.as_json,
                     human=f"ingestion: {summary.counters.status}\n",
+                    errors=(
+                        [
+                            {
+                                "code": "ingestion_items_failed",
+                                "count": summary.counters.failed_records,
+                            }
+                        ]
+                        if summary.counters.failed_records
+                        else []
+                    ),
                 )
                 return int(
-                    ExitCode.PARTIAL if summary.counters.failed_records else ExitCode.SUCCESS
+                    ExitCode.RECORDED_ERRORS
+                    if summary.counters.failed_records
+                    else ExitCode.SUCCESS
                 )
         if arguments.command == "collections":
             if collections_service_factory is None:
@@ -389,6 +396,7 @@ def _write_result(
     truncated: bool = False,
     returned: int | None = None,
     available: int | None = None,
+    errors: list[dict[str, object]] | None = None,
 ) -> None:
     if not as_json:
         output.write(human)
@@ -398,7 +406,7 @@ def _write_result(
         "operation": operation,
         "data": data,
         "coverage": {"status": coverage},
-        "errors": [],
+        "errors": [] if errors is None else errors,
         "truncated": truncated,
     }
     if returned is not None:
