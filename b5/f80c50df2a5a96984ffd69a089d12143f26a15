@@ -1,0 +1,28 @@
+tests/catalog/test_snapshot.py
+  s_2f2b8a177ba283::t_4de1f791887290 572,577-584,587-589
+  s_2f2b8a177ba283::t_73576c9c48c2f8 573-576,585-586,590-591
+  s_2f2b8a177ba283::t_0e7716c0e21d79 543,546
+docs/ARCHITECTURE.md
+  s_2f2b8a177ba283::t_6c84be5c9df985 101
+src/paper_insights/adapters/catalog/sqlite/readers.py
+  s_2f2b8a177ba283::t_969df01d3894d0 56,64-87,89-106,163-165,168,176-182
+  s_2f2b8a177ba283::t_0e7716c0e21d79 107-116,160
+CHANGELOG.md
+  s_2f2b8a177ba283::t_6c84be5c9df985 38
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "b5f80c50df2a5a96984ffd69a089d12143f26a15",
+  "prompts": {},
+  "sessions": {
+    "s_2f2b8a177ba283": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a04a7c-f938-7500-b20e-0faa6c4019c5",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Florian BRUNIAUX <florian@bruniaux.com>"
+    }
+  }
+}
