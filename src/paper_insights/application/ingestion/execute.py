@@ -25,7 +25,7 @@ from paper_insights.domain.corpus import (
     RecordObservation,
     SnapshotRecordAttachment,
 )
-from paper_insights.domain.errors import ErrorCode
+from paper_insights.domain.errors import PUBLIC_ERROR_MESSAGES, ErrorCode
 from paper_insights.domain.identifiers import RunId, Sha256
 
 MetadataPayload = Callable[[ObservedPaperVersion], bytes]
@@ -34,7 +34,7 @@ MetadataPayload = Callable[[ObservedPaperVersion], bytes]
 class IngestionExecutionError(ValueError):
     def __init__(self, code: ErrorCode) -> None:
         self.code = code
-        super().__init__(code.value)
+        super().__init__(PUBLIC_ERROR_MESSAGES[code])
 
 
 class ExecutePreparedIngestion:
@@ -61,17 +61,20 @@ class ExecutePreparedIngestion:
     ) -> IngestionSummary:
         self._validate_confirmation(prepared, confirmation)
         metadata = self._validated_metadata(prepared)
-        page_blobs = tuple(
-            self._blobs.put(BlobWrite(content=page.raw_payload, media_type=page.media_type))
-            for page in prepared.batch.pages
-        )
-        metadata_blobs = {
-            locator: MetadataBlobRef(
-                blob=self._blobs.put(BlobWrite(content=payload, media_type="application/json")),
-                normalized_sha256=Sha256(hashlib.sha256(payload).hexdigest()),
+        try:
+            page_blobs = tuple(
+                self._blobs.put(BlobWrite(content=page.raw_payload, media_type=page.media_type))
+                for page in prepared.batch.pages
             )
-            for locator, payload in metadata.items()
-        }
+            metadata_blobs = {
+                locator: MetadataBlobRef(
+                    blob=self._blobs.put(BlobWrite(content=payload, media_type="application/json")),
+                    normalized_sha256=Sha256(hashlib.sha256(payload).hexdigest()),
+                )
+                for locator, payload in metadata.items()
+            }
+        except Exception as exc:
+            raise IngestionExecutionError(ErrorCode.ARTIFACT_INVALID) from exc
         run_id = RunId(self._ids.new())
         attach = AttachPreparedRun(
             run_id=run_id,
@@ -91,6 +94,7 @@ class ExecutePreparedIngestion:
                 for page_ordinal, page in enumerate(prepared.batch.pages)
             ),
         )
+        self._validate_confirmation(prepared, confirmation)
         with self._catalog.begin() as unit:
             attached = unit.ingestion.attach_prepared_run(attach)
             unit.commit()
@@ -173,8 +177,11 @@ class ExecutePreparedIngestion:
 
     @staticmethod
     def _item_failure_code(error: Exception) -> ErrorCode | None:
-        if isinstance(error, ValueError):
-            return ErrorCode.RECORD_INVALID
-        if error.args == (ErrorCode.CATALOG_CONFLICT.value,):
-            return ErrorCode.CATALOG_CONFLICT
+        code = getattr(error, "code", None)
+        if isinstance(code, ErrorCode) and code in {
+            ErrorCode.RECORD_INVALID,
+            ErrorCode.ARTIFACT_INVALID,
+            ErrorCode.CATALOG_CONFLICT,
+        }:
+            return code
         return None

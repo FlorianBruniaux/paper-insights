@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from uuid import UUID
 
 from paper_insights.application.ingestion.prepare import PrepareDiscovery
@@ -118,3 +119,16 @@ def test_prepare_rejects_a_provider_batch_for_another_query_or_source() -> None:
         assert str(exc) == "provider batch differs from the discovery request"
     else:
         raise AssertionError("mismatched provider batch was accepted")
+
+
+def test_prepare_has_no_mutation_port_and_creates_no_corpus_path(tmp_path: Path) -> None:
+    corpus_root = tmp_path / "corpus"
+    batch = _batch()
+    provider = LocalProvider(batch)
+
+    prepared = PrepareDiscovery(provider=provider, clock=FrozenClock()).prepare(batch.query)
+
+    assert prepared.batch is batch
+    assert not corpus_root.exists()
+    assert not (corpus_root / "catalog.sqlite3").exists()
+    assert not (corpus_root / "blobs").exists()

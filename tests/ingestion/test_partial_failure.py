@@ -38,7 +38,7 @@ from paper_insights.domain.corpus import (
     RunCounters,
     StoredBlobRef,
 )
-from paper_insights.domain.errors import ErrorCode
+from paper_insights.domain.errors import PUBLIC_ERROR_MESSAGES, ErrorCode
 from paper_insights.domain.identifiers import Sha256, SnapshotId, SourceId
 from paper_insights.paths import CorpusPaths
 
@@ -50,6 +50,17 @@ NOW = datetime(2026, 8, 30, 8, 0, tzinfo=UTC)
 class FrozenClock:
     def now(self) -> datetime:
         return NOW
+
+
+class ExpiringDuringPublicationClock:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def now(self) -> datetime:
+        self.calls += 1
+        if self.calls == 1:
+            return NOW
+        return NOW + timedelta(minutes=15)
 
 
 class SequenceIds:
@@ -125,6 +136,12 @@ class MemoryBlobs:
         raise NotImplementedError(ref)
 
 
+class ClosedItemError(ValueError):
+    def __init__(self, code: ErrorCode) -> None:
+        self.code = code
+        super().__init__("opaque adapter detail")
+
+
 class PartialRepository:
     def __init__(self) -> None:
         self.run_id = None
@@ -146,7 +163,7 @@ class PartialRepository:
 
     def record_item(self, command: object) -> IngestionItemRef:
         if command.record.record_ordinal == 1:
-            raise ValueError("invalid second record")
+            raise ClosedItemError(ErrorCode.RECORD_INVALID)
         item = IngestionItemRef(
             run_id=command.run_id,
             snapshot_id=command.record.snapshot_id,
@@ -182,6 +199,12 @@ class PartialRepository:
                 failed_records=1,
             ),
         )
+
+
+class TextOnlyConflictRepository(PartialRepository):
+    def record_item(self, command: object) -> IngestionItemRef:
+        del command
+        raise RuntimeError(ErrorCode.CATALOG_CONFLICT.value)
 
 
 class Unit:
@@ -345,7 +368,29 @@ def test_invalid_canonical_metadata_precedes_every_blob_or_catalog_mutation() ->
         service.execute(prepared, confirmation=prepared.digest)
 
     assert raised.value.code is ErrorCode.ARTIFACT_INVALID
+    assert str(raised.value) == PUBLIC_ERROR_MESSAGES[ErrorCode.ARTIFACT_INVALID]
     assert blobs.refs == []
+    assert catalog.begins == 0
+
+
+def test_expiration_during_blob_publication_is_revalidated_before_catalog_begin() -> None:
+    blobs = MemoryBlobs()
+    catalog = Catalog()
+    prepared = _prepared()
+    clock = ExpiringDuringPublicationClock()
+    service = ExecutePreparedIngestion(
+        blobs=blobs,
+        catalog=catalog,
+        clock=clock,
+        ids=SequenceIds(),
+        metadata_payload=normalized_metadata_payload,
+    )
+
+    with pytest.raises(IngestionExecutionError) as raised:
+        service.execute(prepared, confirmation=prepared.digest)
+
+    assert raised.value.code is ErrorCode.PREVIEW_EXPIRED
+    assert len(blobs.refs) == 3
     assert catalog.begins == 0
 
 
@@ -354,10 +399,25 @@ def test_blob_failure_never_opens_the_snapshot_transaction() -> None:
     catalog = Catalog()
     prepared = _prepared()
 
-    with pytest.raises(OSError, match="blob publication"):
+    with pytest.raises(IngestionExecutionError) as raised:
         _service(blobs, catalog).execute(prepared, confirmation=prepared.digest)
 
+    assert raised.value.code is ErrorCode.ARTIFACT_INVALID
+    assert str(raised.value) == PUBLIC_ERROR_MESSAGES[ErrorCode.ARTIFACT_INVALID]
+    assert isinstance(raised.value.__cause__, OSError)
     assert catalog.begins == 0
+
+
+def test_text_only_catalog_conflict_is_not_masked_as_a_closed_item_failure() -> None:
+    blobs = MemoryBlobs()
+    catalog = Catalog()
+    catalog.repository = TextOnlyConflictRepository()
+    prepared = _prepared()
+
+    with pytest.raises(RuntimeError, match=ErrorCode.CATALOG_CONFLICT.value):
+        _service(blobs, catalog).execute(prepared, confirmation=prepared.digest)
+
+    assert catalog.repository.failures == []
 
 
 def test_crash_before_blob_replace_leaves_no_final_blob_or_catalog_graph(
@@ -383,9 +443,11 @@ def test_crash_before_blob_replace_leaves_no_final_blob_or_catalog_graph(
     )
     prepared = _prepared()
 
-    with pytest.raises(OSError, match="unsafe blob path"):
+    with pytest.raises(IngestionExecutionError) as raised:
         service.execute(prepared, confirmation=prepared.digest)
 
+    assert raised.value.code is ErrorCode.ARTIFACT_INVALID
+    assert str(raised.value) == PUBLIC_ERROR_MESSAGES[ErrorCode.ARTIFACT_INVALID]
     assert tuple(paths.blobs.rglob("*.blob")) == ()
     with engine.connect() as connection:
         assert connection.execute(sa.text("SELECT count(*) FROM ingestion_runs")).scalar_one() == 0
