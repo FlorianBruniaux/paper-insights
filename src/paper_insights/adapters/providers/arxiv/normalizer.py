@@ -148,7 +148,7 @@ def normalize_arxiv_entry(
                 ObservedIdentifier(
                     scheme="doi",
                     canonical_value=canonical_doi,
-                    scope=IdentifierScope.VERSION,
+                    scope=IdentifierScope.PAPER,
                 )
             )
 

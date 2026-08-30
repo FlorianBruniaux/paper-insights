@@ -208,7 +208,7 @@ Clé primaire: `(version_observation_id, position)`. Contrainte unique additionn
 
 Les associations polymorphiques sont interdites.
 
-À l'ingestion, `source_item_id` produit toujours un `paper_identifier` dont le scheme est `source_id`, et `source_version_key` produit toujours un `version_identifier` du même scheme. Chaque `ObservedIdentifier` additionnel porte un `IdentifierScope` fermé, `paper` ou `version`, qui détermine la table cible. Aucun adapter catalogue ne déduit ce scope du nom du scheme. Par exemple, le provider arXiv déclare explicitement le scope du DOI normalisé qu'il observe.
+À l'ingestion, `source_item_id` produit toujours un `paper_identifier` dont le scheme est `source_id`, et `source_version_key` produit toujours un `version_identifier` du même scheme. Chaque `ObservedIdentifier` additionnel porte un `IdentifierScope` fermé, `paper` ou `version`, qui détermine la table cible. Aucun adapter catalogue ne déduit ce scope du nom du scheme. Le provider arXiv déclare explicitement son DOI normalisé au scope `paper`, car plusieurs révisions arXiv d'un même papier peuvent observer le même DOI. Les métadonnées DOI observées restent attachées à chaque `version_observation`; seule l'association canonique de l'identifiant est partagée par les versions du papier.
 
 ### `paper_identifiers`
 

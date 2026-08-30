@@ -34,7 +34,7 @@ def test_parser_handles_default_namespaces_and_preserves_ordered_metadata() -> N
     assert tuple(
         (identifier.scheme, identifier.canonical_value, identifier.scope)
         for identifier in first.observation.identifiers
-    ) == (("doi", "10.1234/example.1", IdentifierScope.VERSION),)
+    ) == (("doi", "10.1234/example.1", IdentifierScope.PAPER),)
     assert first.observation.comment == "12 pages, 3 figures"
     assert first.observation.journal_reference == "Journal of Fixtures 1 (2026)"
     assert first.observation.source_url == "https://arxiv.org/abs/2608.01234v1"
@@ -62,6 +62,18 @@ def test_parser_keeps_v1_and_v2_as_distinct_versions() -> None:
     )
     assert first.records[0].observation.source_version_key == "2608.01234v1"
     assert revised.records[0].observation.source_version_key == "2608.01234v2"
+
+
+def test_parser_scopes_a_doi_shared_by_arxiv_revisions_to_the_paper() -> None:
+    first = parse_arxiv_feed((FIXTURES / "page-1.xml").read_bytes(), page_ordinal=0)
+    revised = parse_arxiv_feed((FIXTURES / "revision-v2.xml").read_bytes(), page_ordinal=1)
+
+    first_observation = first.records[0].observation
+    revised_observation = revised.records[0].observation
+    assert first_observation is not None
+    assert revised_observation is not None
+    assert first_observation.identifiers == revised_observation.identifiers
+    assert first_observation.identifiers[0].scope is IdentifierScope.PAPER
 
 
 def test_invalid_entry_becomes_a_bounded_record_issue() -> None:
