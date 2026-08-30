@@ -23,6 +23,9 @@ Toutes les modifications notables du projet sont consignées ici.
 - Adaptateur arXiv borné avec validation des redirections, pagination déterministe, déduplication et normalisation versionnée testées sur fixtures locales.
 - Socle Python installable, stockage de blobs atomique et diagnostics `doctor` read-only qui distinguent corruption prouvée et état `UNKNOWN`.
 - Workflow CI séparant contrôles statiques, tests unitaires sans réseau et gate de frontière MCP avant l'implémentation du runtime MCP.
+- Ingestion préparée avec confirmation exacte, attachement atomique du graphe de snapshots, transactions courtes par record, compteurs fermés, replay idempotent et réparation explicite des runs interrompues.
+- Collections applicatives et citations BibTeX, Markdown et CSL-JSON rendues depuis une observation et une provenance exactes, sans champ bibliographique inventé.
+- Index local FTS5 `fts-v2` auto-descriptif avec passages déterministes, publication sous garde de révision, lecture par descripteur en mode read-only et six filtres fermés.
 
 ### Changed
 
@@ -48,3 +51,6 @@ Toutes les modifications notables du projet sont consignées ici.
 - Les observations versionnées portent aussi `origin_source_id`, ce qui rend impossible une provenance croisée entre version, snapshot et run.
 - Les diagnostics revalident les preuves catalogue et artefact après chaque phase afin de refuser les conclusions devenues obsolètes pendant une course concurrente.
 - Les enums textuels publics utilisent `StrEnum`, ce qui rend `str(member)` identique à la valeur canonique sérialisée tout en conservant les mêmes noms et valeurs.
+- La projection catalogue de recherche inclut source, auteurs ordonnés, catégories, langue, date et collections; son empreinte logique couvre désormais chaque valeur filtrable.
+- La publication FTS restaure l'ancien index canonique après une mutation concurrente du répertoire et ne supprime jamais un nom devenu ambigu; un résidu dans un répertoire déplacé reste alors explicitement non réparé.
+- Les slugs de collection au format UUID sont refusés et le filtre collection interprète sans ambiguïté une valeur UUID comme ID, toute autre valeur comme slug.

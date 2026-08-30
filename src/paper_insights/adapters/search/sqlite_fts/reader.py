@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import sqlite3
+import unicodedata
 from pathlib import Path
 from uuid import UUID
 
@@ -24,6 +25,7 @@ from paper_insights.domain.retrieval import (
     PassageSearchQuery,
     PassageSearchResult,
     PassageView,
+    SearchFilters,
 )
 
 from .schema import (
@@ -34,6 +36,50 @@ from .schema import (
 )
 
 _SEARCH_TOKEN = re.compile(r"\w+", re.UNICODE)
+_DOCUMENT_FILTER_SQL = (
+    " AND (? IS NULL OR d.source_id = ?)"
+    " AND (? IS NULL OR EXISTS (SELECT 1 FROM document_categories AS dc "
+    "WHERE dc.paper_version_id = d.paper_version_id AND dc.category = ?))"
+    " AND (? IS NULL OR EXISTS (SELECT 1 FROM document_authors AS da "
+    "WHERE da.paper_version_id = d.paper_version_id AND da.name_folded = ?))"
+    " AND (? IS NULL OR d.language_folded = ?)"
+    " AND (? IS NULL OR d.submitted_at >= ?)"
+    " AND (? IS NULL OR d.submitted_at <= ?)"
+    " AND (? IS NULL OR EXISTS (SELECT 1 FROM document_collections AS dco_id "
+    "WHERE dco_id.paper_version_id = d.paper_version_id AND dco_id.collection_id = ?))"
+    " AND (? IS NULL OR EXISTS (SELECT 1 FROM document_collections AS dco_slug "
+    "WHERE dco_slug.paper_version_id = d.paper_version_id AND dco_slug.slug = ?))"
+)
+_PAPER_COUNT_SQL = (
+    "SELECT count(*) FROM paper_fts JOIN documents AS d "  # noqa: S608
+    "ON d.paper_version_id = paper_fts.paper_version_id "
+    "WHERE paper_fts MATCH ?" + _DOCUMENT_FILTER_SQL
+)
+_PAPER_SEARCH_SQL = (
+    "SELECT d.paper_id, d.paper_version_id, d.version_observation_id, "
+    "d.title, d.artifact_sha256, bm25(paper_fts, 10.0, 1.0) AS score "
+    "FROM paper_fts JOIN documents AS d "
+    "ON d.paper_version_id = paper_fts.paper_version_id "
+    "WHERE paper_fts MATCH ?"
+    + _DOCUMENT_FILTER_SQL
+    + " ORDER BY score, d.paper_id, d.paper_version_id LIMIT ?"
+)
+_PASSAGE_COUNT_SQL = (
+    "SELECT count(*) FROM passage_fts JOIN passages AS p "  # noqa: S608
+    "ON p.passage_id = passage_fts.passage_id "
+    "JOIN documents AS d ON d.paper_version_id = p.paper_version_id "
+    "WHERE passage_fts MATCH ?" + _DOCUMENT_FILTER_SQL
+)
+_PASSAGE_SEARCH_SQL = (
+    "SELECT p.passage_id, p.paper_id, p.paper_version_id, "
+    "p.version_observation_id, p.artifact_sha256, p.chunk_schema_version, "
+    "p.section, p.ordinal, p.normalized_text, p.start_offset, p.end_offset, "
+    "bm25(passage_fts) AS score "
+    "FROM passage_fts JOIN passages AS p "
+    "ON p.passage_id = passage_fts.passage_id "
+    "JOIN documents AS d ON d.paper_version_id = p.paper_version_id "
+    "WHERE passage_fts MATCH ?" + _DOCUMENT_FILTER_SQL + " ORDER BY score, p.passage_id LIMIT ?"
+)
 
 
 class SqliteFtsSearchReader:
@@ -53,7 +99,6 @@ class SqliteFtsSearchReader:
         self._maximum_excerpt_characters = maximum_excerpt_characters
 
     def search_papers(self, query: PaperSearchQuery) -> PaperSearchResult:
-        self._reject_filters(query.filters)
         catalog_revision = self._catalog_revision()
         if not safe_target_exists(self._corpus_root, self._index_path):
             return PaperSearchResult(
@@ -67,6 +112,7 @@ class SqliteFtsSearchReader:
                 applied_limit=query.limit,
             )
         expression = self._fts_expression(query.query)
+        filter_parameters = self._document_filter_parameters(query.filters)
         with open_readonly(self._index_path, corpus_root=self._corpus_root) as connection:
             receipt = read_index_receipt_from_connection(connection)
             rows: list[sqlite3.Row]
@@ -76,18 +122,13 @@ class SqliteFtsSearchReader:
             else:
                 available = int(
                     connection.execute(
-                        "SELECT count(*) FROM paper_fts WHERE paper_fts MATCH ?",
-                        (expression,),
+                        _PAPER_COUNT_SQL,
+                        (expression, *filter_parameters),
                     ).fetchone()[0]
                 )
                 rows = connection.execute(
-                    "SELECT d.paper_id, d.paper_version_id, d.version_observation_id, "
-                    "d.title, d.artifact_sha256, bm25(paper_fts, 10.0, 1.0) AS score "
-                    "FROM paper_fts JOIN documents AS d "
-                    "ON d.paper_version_id = paper_fts.paper_version_id "
-                    "WHERE paper_fts MATCH ? "
-                    "ORDER BY score, d.paper_id, d.paper_version_id LIMIT ?",
-                    (expression, query.limit),
+                    _PAPER_SEARCH_SQL,
+                    (expression, *filter_parameters, query.limit),
                 ).fetchall()
         hits = tuple(
             PaperSearchHit(
@@ -115,7 +156,6 @@ class SqliteFtsSearchReader:
         )
 
     def search_passages(self, query: PassageSearchQuery) -> PassageSearchResult:
-        self._reject_filters(query.filters)
         catalog_revision = self._catalog_revision()
         if not safe_target_exists(self._corpus_root, self._index_path):
             return PassageSearchResult(
@@ -130,6 +170,7 @@ class SqliteFtsSearchReader:
             )
         expression = self._fts_expression(query.query)
         tokens = self._tokens(query.query)
+        filter_parameters = self._document_filter_parameters(query.filters)
         with open_readonly(self._index_path, corpus_root=self._corpus_root) as connection:
             receipt = read_index_receipt_from_connection(connection)
             rows: list[sqlite3.Row]
@@ -139,20 +180,13 @@ class SqliteFtsSearchReader:
             else:
                 available = int(
                     connection.execute(
-                        "SELECT count(*) FROM passage_fts WHERE passage_fts MATCH ?",
-                        (expression,),
+                        _PASSAGE_COUNT_SQL,
+                        (expression, *filter_parameters),
                     ).fetchone()[0]
                 )
                 rows = connection.execute(
-                    "SELECT p.passage_id, p.paper_id, p.paper_version_id, "
-                    "p.version_observation_id, p.artifact_sha256, p.chunk_schema_version, "
-                    "p.section, p.ordinal, p.normalized_text, p.start_offset, p.end_offset, "
-                    "bm25(passage_fts) AS score "
-                    "FROM passage_fts JOIN passages AS p "
-                    "ON p.passage_id = passage_fts.passage_id "
-                    "WHERE passage_fts MATCH ? "
-                    "ORDER BY score, p.passage_id LIMIT ?",
-                    (expression, query.limit),
+                    _PASSAGE_SEARCH_SQL,
+                    (expression, *filter_parameters, query.limit),
                 ).fetchall()
         hits = tuple(
             PassageSearchHit(
@@ -204,11 +238,51 @@ class SqliteFtsSearchReader:
         return " AND ".join(f'"{token}"' for token in tokens)
 
     @staticmethod
-    def _reject_filters(filters: object) -> None:
-        from paper_insights.domain.retrieval import SearchFilters
+    def _document_filter_parameters(filters: SearchFilters) -> tuple[str | None, ...]:
+        source = str(filters.source_id) if filters.source_id is not None else None
+        author = (
+            unicodedata.normalize("NFC", filters.author).casefold()
+            if filters.author is not None
+            else None
+        )
+        language = (
+            unicodedata.normalize("NFC", filters.language).casefold()
+            if filters.language is not None
+            else None
+        )
+        date_from = filters.date_from.isoformat() if filters.date_from is not None else None
+        date_to = filters.date_to.isoformat() if filters.date_to is not None else None
+        collection_id, collection_slug = SqliteFtsSearchReader._collection_selector(
+            filters.collection
+        )
+        return (
+            source,
+            source,
+            filters.category,
+            filters.category,
+            author,
+            author,
+            language,
+            language,
+            date_from,
+            date_from,
+            date_to,
+            date_to,
+            collection_id,
+            collection_id,
+            collection_slug,
+            collection_slug,
+        )
 
-        if filters != SearchFilters():
-            raise ValueError("search filters are unsupported by index schema fts-v1")
+    @staticmethod
+    def _collection_selector(value: str | None) -> tuple[str | None, str | None]:
+        if value is None:
+            return None, None
+        try:
+            collection_id = str(UUID(value))
+        except ValueError:
+            return None, value
+        return collection_id, None
 
     @staticmethod
     def _coverage(

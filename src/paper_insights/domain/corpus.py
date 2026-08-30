@@ -72,6 +72,14 @@ class ArtifactKind(StrEnum):
 _COLLECTION_SLUG = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
 
+def _uuid_shaped(value: str) -> bool:
+    try:
+        UUID(value)
+    except ValueError:
+        return False
+    return True
+
+
 def _require_utc(value: datetime, field: str) -> None:
     if value.tzinfo is None or value.utcoffset() != timedelta(0):
         raise ValueError(f"{field} must use UTC")
@@ -408,8 +416,14 @@ class CreateCollection:
     title: str
 
     def __post_init__(self) -> None:
-        if not _COLLECTION_SLUG.fullmatch(self.slug) or not self.title.strip():
-            raise ValueError("collection slug and title are required")
+        if (
+            not _COLLECTION_SLUG.fullmatch(self.slug)
+            or _uuid_shaped(self.slug)
+            or not self.title.strip()
+        ):
+            raise ValueError(
+                "collection slug and title are required and slug cannot be UUID-shaped"
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -449,8 +463,14 @@ class CollectionView:
     updated_at: datetime
 
     def __post_init__(self) -> None:
-        if not _COLLECTION_SLUG.fullmatch(self.slug) or not self.title.strip():
-            raise ValueError("collection slug and title are required")
+        if (
+            not _COLLECTION_SLUG.fullmatch(self.slug)
+            or _uuid_shaped(self.slug)
+            or not self.title.strip()
+        ):
+            raise ValueError(
+                "collection slug and title are required and slug cannot be UUID-shaped"
+            )
         if self.paper_count < 0:
             raise ValueError("collection paper count cannot be negative")
         _require_utc(self.created_at, "collection creation timestamp")

@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from enum import StrEnum
 from pathlib import Path
 from typing import Protocol
+from uuid import UUID
 
 from paper_insights.domain.identifiers import (
     CollectionId,
@@ -121,10 +122,20 @@ class IndexDocument:
             raise ValueError("index document collection IDs must be unique")
         if any(not value.strip() for value in self.collection_slugs):
             raise ValueError("index document collection slugs cannot be blank")
+        if any(_uuid_shaped(value) for value in self.collection_slugs):
+            raise ValueError("index document collection slugs cannot be UUID-shaped")
         if len(set(self.collection_slugs)) != len(self.collection_slugs):
             raise ValueError("index document collection slugs must be unique")
         if len(self.collection_ids) != len(self.collection_slugs):
             raise ValueError("index document collection IDs and slugs must have equal cardinality")
+
+
+def _uuid_shaped(value: str) -> bool:
+    try:
+        UUID(value)
+    except ValueError:
+        return False
+    return True
 
 
 @dataclass(frozen=True, slots=True)

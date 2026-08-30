@@ -7,6 +7,7 @@ from paper_insights.domain.identifiers import (
     PaperId,
     PaperVersionId,
     Sha256,
+    SourceId,
     VersionObservationId,
 )
 from paper_insights.domain.retrieval import IndexDocument
@@ -17,6 +18,7 @@ def test_title_and_abstract_passages_have_stable_normalized_identities() -> None
         paper_id=PaperId(UUID("01890f3e-3b12-7cc0-98d6-4f6f94748f51")),
         paper_version_id=PaperVersionId(UUID("01890f3e-3b12-7cc0-98d6-4f6f94748f5a")),
         version_observation_id=VersionObservationId(UUID("01890f3e-3b12-7cc0-98d6-4f6f94748f5b")),
+        source_id=SourceId("arxiv"),
         title="Cafe\u0301\r\nagents",
         abstract="  Evidence stays linked.  ",
         metadata_artifact_sha256=Sha256("a" * 64),
@@ -41,6 +43,7 @@ def test_blank_abstract_does_not_create_an_unsearchable_passage() -> None:
         paper_id=PaperId(UUID("01890f3e-3b12-7cc0-98d6-4f6f94748f51")),
         paper_version_id=PaperVersionId(UUID("01890f3e-3b12-7cc0-98d6-4f6f94748f5a")),
         version_observation_id=VersionObservationId(UUID("01890f3e-3b12-7cc0-98d6-4f6f94748f5b")),
+        source_id=SourceId("arxiv"),
         title="Evidence",
         abstract=" \n ",
         metadata_artifact_sha256=Sha256("a" * 64),

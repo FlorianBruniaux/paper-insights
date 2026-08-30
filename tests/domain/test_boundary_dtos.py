@@ -350,6 +350,7 @@ def test_interrupted_run_repair_contract_is_closed_and_time_bounded() -> None:
             overlap_seconds=-1,
         ),
         lambda: CreateCollection("", ""),
+        lambda: CreateCollection(str(ID), "Ambiguous collection slug"),
         lambda: IngestionRunRef(RunId(ID), revision=-1),
         lambda: PaperIdentity(PaperId(ID), datetime(2026, 8, 29)),
         lambda: BlobInspection(False, True, Sha256("a" * 64), 1),

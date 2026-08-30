@@ -167,6 +167,13 @@ def test_index_document_carries_the_complete_filter_projection() -> None:
                 "collection_slugs": (),
             }
         )
+    with pytest.raises(ValueError, match="UUID-shaped"):
+        IndexDocument(
+            **{
+                **{field.name: getattr(document, field.name) for field in fields(document)},
+                "collection_slugs": (str(collection_id),),
+            }
+        )
 
 
 def test_search_rejects_blank_query_excess_hits_and_bad_rank_order() -> None:

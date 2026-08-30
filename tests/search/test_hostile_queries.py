@@ -75,6 +75,7 @@ def _reader(tmp_path: Path) -> SqliteFtsSearchReader:
                 version_observation_id=VersionObservationId(
                     UUID("01890f3e-3b12-7cc0-98d6-4f6f94748f5b")
                 ),
+                source_id=SourceId("arxiv"),
                 title="Evidence agents",
                 abstract="Safe local search, not biology.",
                 metadata_artifact_sha256=Sha256("a" * 64),
@@ -114,7 +115,7 @@ def test_hostile_fts_syntax_is_treated_as_terms_not_as_an_operator_language(
         assert result.returned == 0
 
 
-def test_filters_fail_explicitly_until_frozen_index_document_contract_is_extended(
+def test_source_filter_uses_the_frozen_index_document_contract(
     tmp_path: Path,
 ) -> None:
     reader = _reader(tmp_path)
@@ -123,5 +124,6 @@ def test_filters_fail_explicitly_until_frozen_index_document_contract_is_extende
         filters=SearchFilters(source_id=SourceId("arxiv")),
     )
 
-    with pytest.raises(ValueError, match="unsupported by index schema fts-v1"):
-        reader.search_papers(query)
+    result = reader.search_papers(query)
+
+    assert result.returned == 1

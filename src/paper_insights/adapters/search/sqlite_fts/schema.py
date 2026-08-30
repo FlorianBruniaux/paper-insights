@@ -5,6 +5,7 @@ import json
 import os
 import sqlite3
 import stat
+import unicodedata
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -13,7 +14,7 @@ from urllib.parse import quote
 from paper_insights.domain.identifiers import Sha256
 from paper_insights.domain.retrieval import CatalogRevision, IndexReceipt
 
-INDEX_SCHEMA_VERSION = "fts-v1"
+INDEX_SCHEMA_VERSION = "fts-v2"
 _DIRECTORY_FLAGS = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
 _READ_FLAGS = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
 
@@ -35,10 +36,52 @@ CREATE TABLE documents (
     paper_version_id TEXT PRIMARY KEY,
     paper_id TEXT NOT NULL,
     version_observation_id TEXT NOT NULL UNIQUE,
+    source_id TEXT NOT NULL,
     title TEXT NOT NULL,
     abstract TEXT,
-    artifact_sha256 TEXT NOT NULL
+    artifact_sha256 TEXT NOT NULL,
+    language TEXT,
+    language_folded TEXT,
+    submitted_at TEXT
 );
+
+CREATE TABLE document_authors (
+    paper_version_id TEXT NOT NULL,
+    position INTEGER NOT NULL CHECK (position >= 0),
+    name TEXT NOT NULL,
+    name_folded TEXT NOT NULL,
+    PRIMARY KEY (paper_version_id, position),
+    FOREIGN KEY (paper_version_id) REFERENCES documents (paper_version_id)
+);
+
+CREATE INDEX ix_document_authors_name
+ON document_authors (name_folded, paper_version_id);
+
+CREATE TABLE document_categories (
+    paper_version_id TEXT NOT NULL,
+    position INTEGER NOT NULL CHECK (position >= 0),
+    category TEXT NOT NULL,
+    PRIMARY KEY (paper_version_id, position),
+    UNIQUE (paper_version_id, category),
+    FOREIGN KEY (paper_version_id) REFERENCES documents (paper_version_id)
+);
+
+CREATE INDEX ix_document_categories_category
+ON document_categories (category, paper_version_id);
+
+CREATE TABLE document_collections (
+    paper_version_id TEXT NOT NULL,
+    position INTEGER NOT NULL CHECK (position >= 0),
+    collection_id TEXT NOT NULL,
+    slug TEXT NOT NULL,
+    PRIMARY KEY (paper_version_id, position),
+    UNIQUE (paper_version_id, collection_id),
+    UNIQUE (paper_version_id, slug),
+    FOREIGN KEY (paper_version_id) REFERENCES documents (paper_version_id)
+);
+
+CREATE INDEX ix_document_collections_identity
+ON document_collections (collection_id, slug, paper_version_id);
 
 CREATE TABLE passages (
     passage_id TEXT PRIMARY KEY,
@@ -267,16 +310,36 @@ def read_index_receipt_from_connection(connection: sqlite3.Connection) -> IndexR
 
 def _logical_content_sha256(connection: sqlite3.Connection) -> str:
     document_rows = connection.execute(
-        "SELECT paper_id, paper_version_id, version_observation_id, title, abstract, "
-        "artifact_sha256 FROM documents "
+        "SELECT paper_id, paper_version_id, version_observation_id, source_id, title, abstract, "
+        "artifact_sha256, language, language_folded, submitted_at FROM documents "
         "ORDER BY paper_id, paper_version_id, version_observation_id"
     ).fetchall()
+    authors_by_version = _projection_rows(
+        connection.execute(
+            "SELECT paper_version_id, position, name, name_folded FROM document_authors "
+            "ORDER BY paper_version_id, position"
+        ).fetchall(),
+        value_column="name",
+    )
+    categories_by_version = _projection_rows(
+        connection.execute(
+            "SELECT paper_version_id, position, category FROM document_categories "
+            "ORDER BY paper_version_id, position"
+        ).fetchall(),
+        value_column="category",
+    )
+    collections_by_version = _ordered_collection_projection(connection)
     passage_rows = connection.execute(
         "SELECT passage_id, paper_id, paper_version_id, version_observation_id, "
         "artifact_sha256, chunk_schema_version, section, ordinal, normalized_text, "
         "start_offset, end_offset FROM passages "
         "ORDER BY paper_id, paper_version_id, ordinal, passage_id"
     ).fetchall()
+    for row in document_rows:
+        language = row["language"]
+        expected_language = _fold(str(language)) if language is not None else None
+        if row["language_folded"] != expected_language:
+            raise ValueError("normalized search filter projection is inconsistent")
     fts_documents = tuple(
         tuple(item)
         for item in connection.execute(
@@ -304,8 +367,14 @@ def _logical_content_sha256(connection: sqlite3.Connection) -> str:
             {
                 "abstract": item["abstract"],
                 "artifact_sha256": item["artifact_sha256"],
+                "authors": authors_by_version.get(item["paper_version_id"], []),
+                "categories": categories_by_version.get(item["paper_version_id"], []),
+                "collections": collections_by_version.get(item["paper_version_id"], []),
+                "language": item["language"],
                 "paper_id": item["paper_id"],
                 "paper_version_id": item["paper_version_id"],
+                "source_id": item["source_id"],
+                "submitted_at": item["submitted_at"],
                 "title": item["title"],
                 "version_observation_id": item["version_observation_id"],
             }
@@ -335,3 +404,37 @@ def _logical_content_sha256(connection: sqlite3.Connection) -> str:
         separators=(",", ":"),
     ).encode()
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _projection_rows(
+    rows: list[sqlite3.Row],
+    *,
+    value_column: str,
+) -> dict[str, list[str]]:
+    if value_column not in {"name", "category"}:
+        raise ValueError("unsupported search projection")
+    projected: dict[str, list[str]] = {}
+    for row in rows:
+        if value_column == "name" and row["name_folded"] != _fold(str(row["name"])):
+            raise ValueError("normalized search filter projection is inconsistent")
+        projected.setdefault(str(row["paper_version_id"]), []).append(str(row[value_column]))
+    return projected
+
+
+def _fold(value: str) -> str:
+    return unicodedata.normalize("NFC", value).casefold()
+
+
+def _ordered_collection_projection(
+    connection: sqlite3.Connection,
+) -> dict[str, list[dict[str, str]]]:
+    rows = connection.execute(
+        "SELECT paper_version_id, position, collection_id, slug "
+        "FROM document_collections ORDER BY paper_version_id, position"
+    ).fetchall()
+    projected: dict[str, list[dict[str, str]]] = {}
+    for row in rows:
+        projected.setdefault(str(row["paper_version_id"]), []).append(
+            {"collection_id": str(row["collection_id"]), "slug": str(row["slug"])}
+        )
+    return projected

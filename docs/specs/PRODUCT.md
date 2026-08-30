@@ -72,7 +72,7 @@ paper-insights collections remove article-agents arxiv:2608.01234
 paper-insights collections list --json
 ```
 
-Le slug est unique. Un ajout répété est idempotent. Une collection vide reste listée. Ces mutations passent par la CLI et les services d'application; le MCP peut uniquement les lire.
+Le slug est unique et ne peut pas avoir la forme d'un UUID, afin de rester distinct d'un identifiant interne. Un ajout répété est idempotent. Une collection vide reste listée. Ces mutations passent par la CLI et les services d'application; le MCP peut uniquement les lire.
 
 ### Créer et exécuter une watchlist
 

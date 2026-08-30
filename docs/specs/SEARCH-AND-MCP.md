@@ -50,6 +50,8 @@ Le texte est normalisé en Unicode NFC et les fins de ligne deviennent `\n`. Les
 
 Une erreur ou une révision obsolète laisse l'index publié précédent intact. Une panne avant le remplacement laisse l'ancien index; une panne après le remplacement laisse une base nouvelle et auto-descriptive. Aucun journal SQLite ni second fichier ne participe à l'atomicité.
 
+L'index publié actuel déclare `index_schema_version = "fts-v2"`. Son empreinte logique couvre aussi la source, les auteurs ordonnés, les catégories, la langue, la date de soumission et les couples collection ID/slug. Si le répertoire parent est renommé pendant le remplacement, l'ancien index est restauré au chemin canonique et l'opération échoue. Le code ne supprime aucun nom dans le répertoire déplacé, car son identité pourrait avoir changé; un résidu de la candidate peut donc y rester et doit être traité comme `UNKNOWN` par une inspection opérateur.
+
 ## Requêtes et résultats
 
 La chaîne de recherche contient de 1 à 500 caractères. Le service transforme les termes en expression FTS sûre, utilise des paramètres SQL et n'expose pas les opérateurs FTS bruts en P1.
@@ -62,6 +64,8 @@ Filtres fermés:
 - langue;
 - date minimale et maximale;
 - collection par slug ou ID.
+
+Source, catégorie, slug et ID utilisent une égalité exacte. Une valeur collection analysable comme UUID désigne uniquement un ID; toute autre valeur désigne uniquement un slug. Les slugs au format UUID sont invalides afin de garder cette résolution non ambiguë. Auteur et langue utilisent une égalité Unicode NFC insensible à la casse. Les bornes de date UTC sont inclusives. Les filtres se combinent par conjonction et utilisent uniquement des paramètres SQL.
 
 Limites: 10 par défaut, 50 au maximum pour la CLI, 20 au maximum pour MCP.
 

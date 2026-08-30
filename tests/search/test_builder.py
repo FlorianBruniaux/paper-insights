@@ -4,7 +4,7 @@ import os
 import shutil
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from threading import Barrier, Lock
 from types import TracebackType
@@ -24,6 +24,7 @@ from paper_insights.domain.identifiers import (
     PaperId,
     PaperVersionId,
     Sha256,
+    SourceId,
     VersionObservationId,
 )
 from paper_insights.domain.retrieval import (
@@ -123,9 +124,12 @@ def _request(revision: int, *, title: str = "Evidence agents") -> IndexBuildRequ
                 version_observation_id=VersionObservationId(
                     UUID("01890f3e-3b12-7cc0-98d6-4f6f94748f5b")
                 ),
+                source_id=SourceId("arxiv"),
                 title=title,
                 abstract="Local proof with stable provenance.",
                 metadata_artifact_sha256=Sha256("a" * 64),
+                authors=("Alice Example",),
+                language="en",
             ),
         ),
         catalog_revision=CatalogRevision(revision),
@@ -191,6 +195,27 @@ def test_same_logical_snapshot_has_the_same_content_digest(tmp_path: Path) -> No
     assert first.receipt == second.receipt
 
 
+def test_filter_projection_changes_the_logical_content_digest(tmp_path: Path) -> None:
+    first_request = _request(4)
+    changed_request = replace(
+        first_request,
+        documents=(replace(first_request.documents[0], categories=("cs.AI",)),),
+    )
+    first_builder = SqliteFtsIndexBuilder(
+        tmp_path / "first" / "search-v2.sqlite3",
+        corpus_root=tmp_path,
+    )
+    changed_builder = SqliteFtsIndexBuilder(
+        tmp_path / "changed" / "search-v2.sqlite3",
+        corpus_root=tmp_path,
+    )
+
+    first = first_builder.build_candidate(first_request)
+    changed = changed_builder.build_candidate(changed_request)
+
+    assert first.content_sha256 != changed.content_sha256
+
+
 def test_publish_replaces_only_after_revision_lease_is_valid(tmp_path: Path) -> None:
     published_path = tmp_path / "search-v1.sqlite3"
     builder = SqliteFtsIndexBuilder(published_path, corpus_root=tmp_path)
@@ -226,6 +251,34 @@ def test_publish_rejects_logical_content_tampered_after_candidate_verification(
         connection.close()
 
     with pytest.raises(ValueError, match="content"):
+        builder.publish(candidate, _Lease(CatalogRevision(3)))
+
+    assert candidate.path.exists()
+    assert not published_path.exists()
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "UPDATE document_authors SET name_folded = 'unrelated'",
+        "UPDATE documents SET language_folded = 'unrelated'",
+    ],
+)
+def test_publish_rejects_tampered_filter_shadow_columns(
+    tmp_path: Path,
+    statement: str,
+) -> None:
+    published_path = tmp_path / "search-v2.sqlite3"
+    builder = SqliteFtsIndexBuilder(published_path, corpus_root=tmp_path)
+    candidate = builder.build_candidate(_request(3))
+    connection = sqlite3.connect(candidate.path)
+    try:
+        connection.execute(statement)
+        connection.commit()
+    finally:
+        connection.close()
+
+    with pytest.raises(ValueError, match="normalized search filter projection"):
         builder.publish(candidate, _Lease(CatalogRevision(3)))
 
     assert candidate.path.exists()

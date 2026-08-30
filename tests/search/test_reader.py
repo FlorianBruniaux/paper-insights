@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from types import TracebackType
 from typing import Literal
@@ -15,9 +16,11 @@ from paper_insights.adapters.search.sqlite_fts.reader import SqliteFtsSearchRead
 from paper_insights.adapters.search.sqlite_fts.schema import open_readonly
 from paper_insights.application.research.search import LocalSearch
 from paper_insights.domain.identifiers import (
+    CollectionId,
     PaperId,
     PaperVersionId,
     Sha256,
+    SourceId,
     VersionObservationId,
 )
 from paper_insights.domain.retrieval import (
@@ -27,7 +30,10 @@ from paper_insights.domain.retrieval import (
     IndexDocument,
     PaperSearchQuery,
     PassageSearchQuery,
+    SearchFilters,
 )
+
+_ARXIV_SOURCE = SourceId("arxiv")
 
 
 @dataclass
@@ -72,7 +78,19 @@ class _Catalog:
         return _RevisionSnapshot(self.revision)
 
 
-def _document(index: int, title: str, abstract: str) -> IndexDocument:
+def _document(
+    index: int,
+    title: str,
+    abstract: str,
+    *,
+    source_id: SourceId = _ARXIV_SOURCE,
+    authors: tuple[str, ...] = (),
+    categories: tuple[str, ...] = (),
+    language: str | None = None,
+    submitted_at: datetime | None = None,
+    collection_ids: tuple[CollectionId, ...] = (),
+    collection_slugs: tuple[str, ...] = (),
+) -> IndexDocument:
     suffix = f"{index:02x}"
     return IndexDocument(
         paper_id=PaperId(UUID(f"01890f3e-3b12-7cc0-98d6-4f6f94748f{suffix}")),
@@ -80,9 +98,16 @@ def _document(index: int, title: str, abstract: str) -> IndexDocument:
         version_observation_id=VersionObservationId(
             UUID(f"01890f3e-3b12-7cc0-98d6-4f6f94750f{suffix}")
         ),
+        source_id=source_id,
         title=title,
         abstract=abstract,
         metadata_artifact_sha256=Sha256(f"{index:x}" * 64),
+        authors=authors,
+        categories=categories,
+        language=language,
+        submitted_at=submitted_at,
+        collection_ids=collection_ids,
+        collection_slugs=collection_slugs,
     )
 
 
@@ -100,6 +125,54 @@ def _published_index(tmp_path: Path, *, revision: int = 5) -> Path:
     builder = SqliteFtsIndexBuilder(path, corpus_root=tmp_path)
     candidate = builder.build_candidate(request)
     builder.publish(candidate, _Lease(CatalogRevision(revision)))
+    return path
+
+
+def _published_filter_index(tmp_path: Path) -> Path:
+    path = tmp_path / "search-v2.sqlite3"
+    reading_id = CollectionId(UUID("01890f3e-3b12-7cc0-98d6-4f6f94751f01"))
+    research_id = CollectionId(UUID("01890f3e-3b12-7cc0-98d6-4f6f94751f02"))
+    request = IndexBuildRequest(
+        documents=(
+            _document(
+                1,
+                "Shared evidence one",
+                "Shared evidence from the first paper.",
+                authors=("Alice Example",),
+                categories=("cs.AI",),
+                language="en",
+                submitted_at=datetime(2026, 8, 1, 12, tzinfo=UTC),
+                collection_ids=(reading_id,),
+                collection_slugs=("reading",),
+            ),
+            _document(
+                2,
+                "Shared evidence two",
+                "Shared evidence from the second paper.",
+                authors=("Bob Example",),
+                categories=("cs.CL",),
+                language="fr",
+                submitted_at=datetime(2026, 8, 15, 12, tzinfo=UTC),
+                collection_ids=(research_id,),
+                collection_slugs=("research",),
+            ),
+            _document(
+                3,
+                "Shared evidence three",
+                "Shared evidence from the third paper.",
+                source_id=SourceId("crossref"),
+                authors=("Alice Example", "Carol Example"),
+                categories=("biology",),
+                language="en",
+                submitted_at=datetime(2026, 9, 1, 12, tzinfo=UTC),
+            ),
+        ),
+        catalog_revision=CatalogRevision(5),
+        chunk_schema_version="chunk-v1",
+    )
+    builder = SqliteFtsIndexBuilder(path, corpus_root=tmp_path)
+    candidate = builder.build_candidate(request)
+    builder.publish(candidate, _Lease(CatalogRevision(5)))
     return path
 
 
@@ -125,6 +198,60 @@ def test_paper_search_returns_stable_rank_raw_score_revisions_and_counts(
     assert isinstance(first.hits[0].bm25_score, float)
     assert first.hits[0].title == "Agent evidence"
     assert first.hits[0].artifact_sha256 == Sha256("2" * 64)
+
+
+@pytest.mark.parametrize(
+    ("filters", "expected_titles"),
+    [
+        (SearchFilters(source_id=SourceId("crossref")), {"Shared evidence three"}),
+        (SearchFilters(category="cs.AI"), {"Shared evidence one"}),
+        (SearchFilters(author="ALICE EXAMPLE"), {"Shared evidence one", "Shared evidence three"}),
+        (SearchFilters(language="EN"), {"Shared evidence one", "Shared evidence three"}),
+        (
+            SearchFilters(date_from=datetime(2026, 8, 15, 12, tzinfo=UTC)),
+            {"Shared evidence two", "Shared evidence three"},
+        ),
+        (
+            SearchFilters(date_to=datetime(2026, 8, 15, 12, tzinfo=UTC)),
+            {"Shared evidence one", "Shared evidence two"},
+        ),
+        (SearchFilters(collection="reading"), {"Shared evidence one"}),
+        (
+            SearchFilters(collection="01890f3e-3b12-7cc0-98d6-4f6f94751f02"),
+            {"Shared evidence two"},
+        ),
+        (
+            SearchFilters(
+                source_id=SourceId("arxiv"),
+                author="bob example",
+                language="FR",
+                date_from=datetime(2026, 8, 15, 12, tzinfo=UTC),
+                date_to=datetime(2026, 8, 15, 12, tzinfo=UTC),
+                collection="research",
+            ),
+            {"Shared evidence two"},
+        ),
+    ],
+)
+def test_paper_and_passage_search_apply_closed_filters(
+    tmp_path: Path,
+    filters: SearchFilters,
+    expected_titles: set[str],
+) -> None:
+    path = _published_filter_index(tmp_path)
+    reader = SqliteFtsSearchReader(path, _Catalog(5), corpus_root=tmp_path)
+
+    papers = reader.search_papers(PaperSearchQuery(query="shared evidence", filters=filters))
+    passages = reader.search_passages(
+        PassageSearchQuery(query="shared evidence", filters=filters, limit=50)
+    )
+
+    assert {hit.title for hit in papers.hits} == expected_titles
+    assert {str(hit.passage.paper_id) for hit in passages.hits} == {
+        str(hit.paper_id) for hit in papers.hits
+    }
+    assert papers.available == len(expected_titles)
+    assert passages.available == 2 * len(expected_titles)
 
 
 def test_passage_search_and_lookup_preserve_exact_identity_with_bounded_excerpt(

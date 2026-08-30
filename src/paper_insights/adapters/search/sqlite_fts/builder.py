@@ -55,6 +55,10 @@ def _normalize(value: str) -> str:
     return unicodedata.normalize("NFC", value.replace("\r\n", "\n").replace("\r", "\n"))
 
 
+def _fold(value: str) -> str:
+    return _normalize(value).casefold()
+
+
 def passages_for_document(
     document: IndexDocument, chunk_schema_version: str
 ) -> tuple[PassageView, ...]:
@@ -599,8 +603,23 @@ class SqliteFtsIndexBuilder:
                 {
                     "abstract": item.abstract,
                     "artifact_sha256": str(item.metadata_artifact_sha256),
+                    "authors": list(item.authors),
+                    "categories": list(item.categories),
+                    "collections": [
+                        {"collection_id": str(collection_id), "slug": slug}
+                        for collection_id, slug in zip(
+                            item.collection_ids,
+                            item.collection_slugs,
+                            strict=True,
+                        )
+                    ],
+                    "language": item.language,
                     "paper_id": str(item.paper_id),
                     "paper_version_id": str(item.paper_version_id),
+                    "source_id": str(item.source_id),
+                    "submitted_at": (
+                        item.submitted_at.isoformat() if item.submitted_at is not None else None
+                    ),
                     "title": item.title,
                     "version_observation_id": str(item.version_observation_id),
                 }
@@ -651,15 +670,64 @@ class SqliteFtsIndexBuilder:
             for document in documents:
                 connection.execute(
                     "INSERT INTO documents "
-                    "(paper_version_id, paper_id, version_observation_id, title, abstract, "
-                    "artifact_sha256) VALUES (?, ?, ?, ?, ?, ?)",
+                    "(paper_version_id, paper_id, version_observation_id, source_id, title, "
+                    "abstract, artifact_sha256, language, language_folded, submitted_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         str(document.paper_version_id),
                         str(document.paper_id),
                         str(document.version_observation_id),
+                        str(document.source_id),
                         document.title,
                         document.abstract,
                         str(document.metadata_artifact_sha256),
+                        document.language,
+                        _fold(document.language) if document.language is not None else None,
+                        (
+                            document.submitted_at.isoformat()
+                            if document.submitted_at is not None
+                            else None
+                        ),
+                    ),
+                )
+                connection.executemany(
+                    "INSERT INTO document_authors "
+                    "(paper_version_id, position, name, name_folded) VALUES (?, ?, ?, ?)",
+                    (
+                        (
+                            str(document.paper_version_id),
+                            position,
+                            author,
+                            _fold(author),
+                        )
+                        for position, author in enumerate(document.authors)
+                    ),
+                )
+                connection.executemany(
+                    "INSERT INTO document_categories "
+                    "(paper_version_id, position, category) VALUES (?, ?, ?)",
+                    (
+                        (str(document.paper_version_id), position, category)
+                        for position, category in enumerate(document.categories)
+                    ),
+                )
+                connection.executemany(
+                    "INSERT INTO document_collections "
+                    "(paper_version_id, position, collection_id, slug) VALUES (?, ?, ?, ?)",
+                    (
+                        (
+                            str(document.paper_version_id),
+                            position,
+                            str(collection_id),
+                            slug,
+                        )
+                        for position, (collection_id, slug) in enumerate(
+                            zip(
+                                document.collection_ids,
+                                document.collection_slugs,
+                                strict=True,
+                            )
+                        )
                     ),
                 )
                 connection.execute(
