@@ -228,7 +228,10 @@ class SqliteFtsIndexBuilder:
                 os.fsync(staging.parent_descriptor)
             except BaseException as primary_error:
                 try:
+                    parent_was_displaced = not self._directory_binding_is_current(staging)
                     self._restore_previous(rollback, previous_receipt)
+                    if parent_was_displaced:
+                        self._remove_displaced_publication(staging)
                 except BaseException as rollback_error:
                     primary_error.add_note(
                         "search index rollback failed: "
@@ -248,6 +251,35 @@ class SqliteFtsIndexBuilder:
             catalog_revision=candidate.catalog_revision,
             generation=candidate.generation,
         )
+
+    @staticmethod
+    def _directory_binding_is_current(binding: _CandidateBinding) -> bool:
+        try:
+            assert_safe_directory_binding(binding.parent_descriptor, binding.parent_path)
+        except (OSError, ValueError):
+            return False
+        return True
+
+    def _remove_displaced_publication(self, staging: _CandidateBinding) -> None:
+        assert_safe_file_binding(
+            staging.parent_descriptor,
+            self._published_name,
+            staging.file_descriptor,
+        )
+        os.unlink(self._published_name, dir_fd=staging.parent_descriptor)
+        if os.fstat(staging.file_descriptor).st_nlink != 0:
+            raise ValueError("displaced search index publication still has a filesystem link")
+        try:
+            os.stat(
+                self._published_name,
+                dir_fd=staging.parent_descriptor,
+                follow_symlinks=False,
+            )
+        except FileNotFoundError:
+            pass
+        else:
+            raise ValueError("displaced search index publication name was replaced during cleanup")
+        os.fsync(staging.parent_descriptor)
 
     def discard(self, candidate: IndexCandidate) -> None:
         candidate_path = candidate.path

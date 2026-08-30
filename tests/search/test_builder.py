@@ -391,7 +391,10 @@ def test_late_parent_rename_restores_previous_index_at_canonical_path(
     assert published_path.is_symlink() is False
     assert published_path.read_bytes() == previous_bytes
     assert read_index_receipt(published_path, corpus_root=tmp_path).generation == 1
+    assert not (displaced_parent / published_path.name).exists()
     builder.discard(candidate)
+    assert not (displaced_parent / published_path.name).exists()
+    assert tuple(tmp_path.rglob(f".{published_path.name}.*-*.sqlite3")) == ()
 
 
 def test_concurrent_candidates_with_same_next_generation_cannot_both_publish(
