@@ -11,6 +11,7 @@ from paper_insights.adapters.artifacts.filesystem.store import (
     BlobStoreError,
     FilesystemBlobStore,
 )
+from paper_insights.application.diagnostics import DiagnosticUnavailableError
 from paper_insights.domain.corpus import BlobWrite, StoredBlobRef
 from paper_insights.domain.identifiers import Sha256
 from paper_insights.paths import CorpusPaths
@@ -113,6 +114,36 @@ def test_put_does_not_follow_parent_replaced_by_symlink_during_publication(
     assert tuple(outside.iterdir()) == ()
 
 
+def test_put_rejects_a_directory_replaced_between_stat_and_open(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    data_root = tmp_path / "corpus"
+    replacement = tmp_path / "replacement"
+    replacement.mkdir()
+    moved = tmp_path / "moved-blobs"
+    store = FilesystemBlobStore(CorpusPaths.from_data_root(data_root))
+    real_open = os.open
+    swapped = False
+
+    def swap_before_open(
+        path: str | bytes | Path, flags: int, *args: object, **kwargs: object
+    ) -> int:
+        nonlocal swapped
+        if path == "blobs" and kwargs.get("dir_fd") is not None and not swapped:
+            store.paths.blobs.rename(moved)
+            replacement.rename(store.paths.blobs)
+            swapped = True
+        return real_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(os, "open", swap_before_open)
+
+    with pytest.raises(BlobStoreError, match="unsafe blob path"):
+        store.put(BlobWrite(content=b"race", media_type="text/plain"))
+
+    assert swapped
+    assert tuple(store.paths.blobs.iterdir()) == ()
+
+
 def test_put_fsyncs_every_parent_that_receives_a_new_directory(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -158,6 +189,34 @@ def test_open_verified_rejects_content_changed_after_publication(tmp_path: Path)
         store.open_verified(ref)
 
 
+def test_inspect_is_unknown_when_blob_binding_changes_after_open(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = FilesystemBlobStore(CorpusPaths.from_data_root(tmp_path / "corpus"))
+    ref = store.put(BlobWrite(content=b"trusted", media_type="text/plain"))
+    target = store.paths.confined(ref.relative_path)
+    moved = tmp_path / "moved-blob"
+    outside = tmp_path / "outside-blob"
+    outside.write_bytes(b"outside")
+    real_read = os.read
+    replaced_after_open = False
+
+    def replace_before_read(descriptor: int, length: int) -> bytes:
+        nonlocal replaced_after_open
+        if not replaced_after_open:
+            target.rename(moved)
+            target.symlink_to(outside)
+            replaced_after_open = True
+        return real_read(descriptor, length)
+
+    monkeypatch.setattr(os, "read", replace_before_read)
+
+    with pytest.raises(DiagnosticUnavailableError):
+        store.inspect(ref)
+
+    assert replaced_after_open
+
+
 def test_inspect_missing_blob_is_read_only(tmp_path: Path) -> None:
     paths = CorpusPaths.from_data_root(tmp_path / "absent")
     store = FilesystemBlobStore(paths)
@@ -185,3 +244,162 @@ def test_find_orphans_reports_without_deleting(tmp_path: Path) -> None:
 
     assert found == (orphan.relative_path,)
     assert store.paths.confined(orphan.relative_path).exists()
+
+
+def test_find_orphans_rejects_a_stable_symlink_tree(tmp_path: Path) -> None:
+    paths = CorpusPaths.from_data_root(tmp_path / "corpus")
+    paths.data_root.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    paths.blobs.symlink_to(outside, target_is_directory=True)
+    store = FilesystemBlobStore(paths)
+
+    with pytest.raises(BlobStoreError, match="unsafe blob path"):
+        store.find_orphans(frozenset())
+
+
+def test_find_orphans_is_unknown_when_a_scanned_directory_disappears(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = FilesystemBlobStore(CorpusPaths.from_data_root(tmp_path / "corpus"))
+    orphan = store.put(BlobWrite(content=b"orphan", media_type="text/plain"))
+    target_name = str(orphan.sha256)[:2]
+    target = store.paths.blobs / target_name
+    moved = tmp_path / "moved-blob-directory"
+    real_open = os.open
+    moved_during_scan = False
+
+    def move_before_open(
+        path: str | bytes | Path, flags: int, *args: object, **kwargs: object
+    ) -> int:
+        nonlocal moved_during_scan
+        if path == target_name and kwargs.get("dir_fd") is not None and not moved_during_scan:
+            target.rename(moved)
+            moved_during_scan = True
+        return real_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(os, "open", move_before_open)
+
+    with pytest.raises(DiagnosticUnavailableError):
+        store.find_orphans(frozenset())
+
+    assert moved_during_scan
+
+
+def test_find_orphans_is_unknown_when_a_scanned_directory_is_replaced(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = FilesystemBlobStore(CorpusPaths.from_data_root(tmp_path / "corpus"))
+    orphan = store.put(BlobWrite(content=b"orphan", media_type="text/plain"))
+    target_name = str(orphan.sha256)[:2]
+    target = store.paths.blobs / target_name
+    moved = tmp_path / "moved-blob-directory"
+    replacement = tmp_path / "replacement"
+    replacement.mkdir()
+    real_open = os.open
+    replaced_during_scan = False
+
+    def replace_before_open(
+        path: str | bytes | Path, flags: int, *args: object, **kwargs: object
+    ) -> int:
+        nonlocal replaced_during_scan
+        if path == target_name and kwargs.get("dir_fd") is not None and not replaced_during_scan:
+            target.rename(moved)
+            replacement.rename(target)
+            replaced_during_scan = True
+        return real_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(os, "open", replace_before_open)
+
+    with pytest.raises(DiagnosticUnavailableError):
+        store.find_orphans(frozenset())
+
+    assert replaced_during_scan
+
+
+def test_find_orphans_is_unknown_when_a_blob_is_replaced_by_a_symlink(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = FilesystemBlobStore(CorpusPaths.from_data_root(tmp_path / "corpus"))
+    orphan = store.put(BlobWrite(content=b"orphan", media_type="text/plain"))
+    target = store.paths.confined(orphan.relative_path)
+    moved = tmp_path / "moved-blob"
+    outside = tmp_path / "outside-blob"
+    outside.write_bytes(b"outside")
+    real_open = os.open
+    replaced_during_scan = False
+
+    def replace_before_open(
+        path: str | bytes | Path, flags: int, *args: object, **kwargs: object
+    ) -> int:
+        nonlocal replaced_during_scan
+        if path == target.name and kwargs.get("dir_fd") is not None and not replaced_during_scan:
+            target.rename(moved)
+            target.symlink_to(outside)
+            replaced_during_scan = True
+        return real_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(os, "open", replace_before_open)
+
+    with pytest.raises(DiagnosticUnavailableError):
+        store.find_orphans(frozenset())
+
+    assert replaced_during_scan
+
+
+def test_find_orphans_is_unknown_when_a_blob_is_replaced_by_another_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = FilesystemBlobStore(CorpusPaths.from_data_root(tmp_path / "corpus"))
+    orphan = store.put(BlobWrite(content=b"orphan", media_type="text/plain"))
+    target = store.paths.confined(orphan.relative_path)
+    moved = tmp_path / "moved-blob"
+    replacement = tmp_path / "replacement-blob"
+    replacement.write_bytes(b"replacement")
+    real_open = os.open
+    replaced_during_scan = False
+
+    def replace_before_open(
+        path: str | bytes | Path, flags: int, *args: object, **kwargs: object
+    ) -> int:
+        nonlocal replaced_during_scan
+        if path == target.name and kwargs.get("dir_fd") is not None and not replaced_during_scan:
+            target.rename(moved)
+            replacement.rename(target)
+            replaced_during_scan = True
+        return real_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(os, "open", replace_before_open)
+
+    with pytest.raises(DiagnosticUnavailableError):
+        store.find_orphans(frozenset())
+
+    assert replaced_during_scan
+
+
+def test_find_orphans_is_unknown_when_root_binding_changes_after_scan(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = FilesystemBlobStore(CorpusPaths.from_data_root(tmp_path / "corpus"))
+    store.put(BlobWrite(content=b"orphan", media_type="text/plain"))
+    moved = tmp_path / "moved-blobs"
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    real_scan = store._scan_blob_directory
+
+    def swap_after_scan(
+        descriptor: int,
+        relative_directory: Path,
+        referenced: set[str],
+        orphans: list[Path],
+    ) -> None:
+        real_scan(descriptor, relative_directory, referenced, orphans)
+        store.paths.blobs.rename(moved)
+        store.paths.blobs.symlink_to(outside, target_is_directory=True)
+
+    monkeypatch.setattr(store, "_scan_blob_directory", swap_after_scan)
+
+    with pytest.raises(DiagnosticUnavailableError):
+        store.find_orphans(frozenset())
+
+    assert tuple(outside.iterdir()) == ()

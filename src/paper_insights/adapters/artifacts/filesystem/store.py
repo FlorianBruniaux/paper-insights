@@ -8,6 +8,7 @@ import stat
 from pathlib import Path
 from typing import BinaryIO
 
+from paper_insights.application.diagnostics import DiagnosticUnavailableError
 from paper_insights.domain.corpus import BlobInspection, BlobWrite, StoredBlobRef
 from paper_insights.domain.identifiers import Sha256
 from paper_insights.paths import CorpusPaths, PathBoundaryError
@@ -69,14 +70,38 @@ class FilesystemBlobStore:
     def inspect(self, ref: StoredBlobRef) -> BlobInspection:
         try:
             content = self._verified_bytes(ref)
+        except FileNotFoundError:
+            return BlobInspection(
+                exists=False,
+                valid=False,
+                sha256=ref.sha256,
+                size_bytes=None,
+            )
+        except DiagnosticUnavailableError:
+            raise
         except BlobStoreError:
             try:
-                path = self._confined(ref.relative_path)
-                size = path.stat(follow_symlinks=False).st_size
-            except (BlobStoreError, OSError, PathBoundaryError):
-                size = None
-            exists = size is not None
-            return BlobInspection(exists=exists, valid=False, sha256=ref.sha256, size_bytes=size)
+                size = self._size_at(ref)
+            except FileNotFoundError:
+                return BlobInspection(
+                    exists=False,
+                    valid=False,
+                    sha256=ref.sha256,
+                    size_bytes=None,
+                )
+            except BlobStoreError:
+                return BlobInspection(
+                    exists=True,
+                    valid=False,
+                    sha256=ref.sha256,
+                    size_bytes=None,
+                )
+            return BlobInspection(
+                exists=True,
+                valid=False,
+                sha256=ref.sha256,
+                size_bytes=size,
+            )
         return BlobInspection(
             exists=True,
             valid=True,
@@ -85,31 +110,84 @@ class FilesystemBlobStore:
         )
 
     def find_orphans(self, referenced: frozenset[Sha256]) -> tuple[Path, ...]:
-        if not self.paths.blobs.exists():
-            return ()
-        if self.paths.blobs.is_symlink():
-            raise BlobStoreError("unsafe blob path")
         referenced_values = {str(digest) for digest in referenced}
         orphans: list[Path] = []
-        for root, directories, files in os.walk(self.paths.blobs, followlinks=False):
-            root_path = Path(root)
-            for directory in directories:
-                if (root_path / directory).is_symlink():
-                    raise BlobStoreError("unsafe blob path")
-            for filename in files:
-                path = root_path / filename
-                if path.is_symlink():
-                    raise BlobStoreError("unsafe blob path")
-                if not filename.endswith(".blob"):
-                    continue
-                digest = filename.removesuffix(".blob")
-                try:
-                    Sha256(digest)
-                except ValueError as exc:
-                    raise BlobStoreError("invalid blob filename") from exc
-                if digest not in referenced_values:
-                    orphans.append(path.relative_to(self.paths.data_root))
+        root_descriptor = -1
+        try:
+            root_descriptor = self._open_absolute_directory(self.paths.blobs, create=False)
+        except FileNotFoundError:
+            return ()
+        except BlobStoreError:
+            raise
+        except OSError as exc:
+            raise DiagnosticUnavailableError("blob tree inspection is unavailable") from exc
+        try:
+            self._scan_blob_directory(
+                root_descriptor,
+                Path("blobs"),
+                referenced_values,
+                orphans,
+            )
+            self._assert_directory_binding(root_descriptor, self.paths.blobs)
+        except BlobStoreError:
+            raise
+        except OSError as exc:
+            raise DiagnosticUnavailableError("blob tree inspection is unavailable") from exc
+        finally:
+            if root_descriptor >= 0:
+                os.close(root_descriptor)
         return tuple(sorted(orphans, key=lambda path: path.as_posix()))
+
+    @classmethod
+    def _scan_blob_directory(
+        cls,
+        descriptor: int,
+        relative_directory: Path,
+        referenced: set[str],
+        orphans: list[Path],
+    ) -> None:
+        with os.scandir(descriptor) as entries:
+            ordered_entries = sorted(entries, key=lambda entry: entry.name)
+        for entry in ordered_entries:
+            if entry.is_symlink():
+                raise BlobStoreError("unsafe blob path")
+            if entry.is_dir(follow_symlinks=False):
+                scanned = entry.stat(follow_symlinks=False)
+                child_descriptor = os.open(entry.name, _DIRECTORY_FLAGS, dir_fd=descriptor)
+                try:
+                    opened = os.fstat(child_descriptor)
+                    if (scanned.st_dev, scanned.st_ino) != (opened.st_dev, opened.st_ino):
+                        raise DiagnosticUnavailableError("blob directory binding changed")
+                    cls._scan_blob_directory(
+                        child_descriptor,
+                        relative_directory / entry.name,
+                        referenced,
+                        orphans,
+                    )
+                finally:
+                    os.close(child_descriptor)
+                continue
+            if not entry.is_file(follow_symlinks=False):
+                raise BlobStoreError("unsafe blob path")
+            if not entry.name.endswith(".blob"):
+                continue
+            scanned = entry.stat(follow_symlinks=False)
+            file_descriptor = os.open(entry.name, _READ_FLAGS, dir_fd=descriptor)
+            try:
+                opened = os.fstat(file_descriptor)
+                if not stat.S_ISREG(opened.st_mode):
+                    raise BlobStoreError("unsafe blob path")
+                if (scanned.st_dev, scanned.st_ino) != (opened.st_dev, opened.st_ino):
+                    raise DiagnosticUnavailableError("blob file binding changed")
+            finally:
+                os.close(file_descriptor)
+            digest = entry.name.removesuffix(".blob")
+            try:
+                Sha256(digest)
+            except ValueError as exc:
+                raise BlobStoreError("invalid blob filename") from exc
+            if digest not in referenced:
+                orphans.append(relative_directory / entry.name)
 
     @staticmethod
     def _relative_path(digest: str) -> Path:
@@ -159,7 +237,13 @@ class FilesystemBlobStore:
             except FileExistsError:
                 pass
         try:
+            metadata = os.stat(name, dir_fd=parent_descriptor, follow_symlinks=False)
+            if not stat.S_ISDIR(metadata.st_mode):
+                raise BlobStoreError("unsafe blob path")
             child_descriptor = os.open(name, _DIRECTORY_FLAGS, dir_fd=parent_descriptor)
+            opened = os.fstat(child_descriptor)
+            if (metadata.st_dev, metadata.st_ino) != (opened.st_dev, opened.st_ino):
+                raise DiagnosticUnavailableError("blob directory binding changed")
             if created:
                 os.fsync(parent_descriptor)
             os.close(parent_descriptor)
@@ -177,11 +261,13 @@ class FilesystemBlobStore:
             expected = os.fstat(descriptor)
             actual = os.fstat(check_descriptor)
             if (expected.st_dev, expected.st_ino) != (actual.st_dev, actual.st_ino):
-                raise BlobStoreError("unsafe blob path")
-        except BlobStoreError:
+                raise DiagnosticUnavailableError("blob directory binding changed")
+        except DiagnosticUnavailableError:
             raise
+        except BlobStoreError as exc:
+            raise DiagnosticUnavailableError("blob directory binding changed") from exc
         except OSError as exc:
-            raise BlobStoreError("unsafe blob path") from exc
+            raise DiagnosticUnavailableError("blob directory binding changed") from exc
         finally:
             if check_descriptor >= 0:
                 os.close(check_descriptor)
@@ -247,25 +333,41 @@ class FilesystemBlobStore:
             return content
         except BlobStoreError:
             raise
+        except FileNotFoundError:
+            raise
         except (OSError, PathBoundaryError) as exc:
-            raise BlobStoreError("blob verification failed") from exc
+            raise DiagnosticUnavailableError("blob verification is unavailable") from exc
         finally:
             if parent_descriptor >= 0:
                 os.close(parent_descriptor)
 
     @staticmethod
     def _verified_bytes_at(parent_descriptor: int, filename: str, ref: StoredBlobRef) -> bytes:
+        scanned = os.stat(filename, dir_fd=parent_descriptor, follow_symlinks=False)
+        if not stat.S_ISREG(scanned.st_mode):
+            raise BlobStoreError("blob verification failed")
         descriptor = os.open(filename, _READ_FLAGS, dir_fd=parent_descriptor)
         try:
             metadata = os.fstat(descriptor)
             if not stat.S_ISREG(metadata.st_mode):
                 raise BlobStoreError("blob verification failed")
+            if (scanned.st_dev, scanned.st_ino) != (metadata.st_dev, metadata.st_ino):
+                raise DiagnosticUnavailableError("blob file binding changed")
             chunks: list[bytes] = []
             digest = hashlib.sha256()
             while chunk := os.read(descriptor, 1024 * 1024):
                 chunks.append(chunk)
                 digest.update(chunk)
             content = b"".join(chunks)
+            try:
+                current = os.stat(filename, dir_fd=parent_descriptor, follow_symlinks=False)
+            except OSError as exc:
+                raise DiagnosticUnavailableError("blob file binding changed") from exc
+            if not stat.S_ISREG(current.st_mode) or (
+                metadata.st_dev,
+                metadata.st_ino,
+            ) != (current.st_dev, current.st_ino):
+                raise DiagnosticUnavailableError("blob file binding changed")
         finally:
             os.close(descriptor)
         if digest.hexdigest() != str(ref.sha256) or len(content) != ref.size_bytes:
@@ -279,3 +381,26 @@ class FilesystemBlobStore:
         while chunk := os.read(descriptor, 1024 * 1024):
             digest.update(chunk)
         return digest.hexdigest()
+
+    def _size_at(self, ref: StoredBlobRef) -> int:
+        parent_descriptor = -1
+        try:
+            parent_descriptor = self._open_blob_parent(ref.relative_path, create=False)
+            metadata = os.stat(
+                ref.relative_path.name,
+                dir_fd=parent_descriptor,
+                follow_symlinks=False,
+            )
+            self._assert_directory_binding(
+                parent_descriptor, self.paths.data_root / ref.relative_path.parent
+            )
+            return metadata.st_size
+        except BlobStoreError:
+            raise
+        except FileNotFoundError:
+            raise
+        except OSError as exc:
+            raise DiagnosticUnavailableError("blob inspection is unavailable") from exc
+        finally:
+            if parent_descriptor >= 0:
+                os.close(parent_descriptor)

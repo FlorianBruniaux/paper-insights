@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import socket
 import sqlite3
 from pathlib import Path
@@ -9,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from paper_insights.adapters.artifacts.filesystem.store import FilesystemBlobStore
+from paper_insights.adapters.diagnostics.sqlite import SqliteCatalogDiagnostics
 from paper_insights.bootstrap import main
 from paper_insights.domain.corpus import BlobWrite
 from paper_insights.paths import CorpusPaths
@@ -250,3 +252,301 @@ def test_doctor_fails_closed_without_touching_a_live_wal(tmp_path: Path) -> None
         "status": "UNKNOWN",
     }
     assert after == before
+
+
+def test_catalog_diagnostic_reports_unknown_when_read_access_is_unavailable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    paths = CorpusPaths.from_data_root(tmp_path / "corpus")
+    paths.data_root.mkdir()
+    _create_catalog(paths, ())
+
+    def deny_catalog_read(catalog: Path) -> tuple[object, ...]:
+        raise PermissionError("injected catalog access denial")
+
+    monkeypatch.setattr(
+        SqliteCatalogDiagnostics, "_read_references", staticmethod(deny_catalog_read)
+    )
+
+    probe = SqliteCatalogDiagnostics(paths).inspect()
+
+    assert probe.status == "UNKNOWN"
+    assert probe.checks[-1].status == "UNKNOWN"
+    assert probe.checks[-1].code == "catalog_read_unavailable"
+
+
+def test_catalog_diagnostic_reports_invalid_when_corruption_is_proven(tmp_path: Path) -> None:
+    paths = CorpusPaths.from_data_root(tmp_path / "corpus")
+    paths.data_root.mkdir()
+    paths.catalog.write_bytes(b"this is not a sqlite catalog")
+
+    probe = SqliteCatalogDiagnostics(paths).inspect()
+
+    assert probe.status == "INVALID"
+    assert probe.checks[-1].status == "INVALID"
+    assert probe.checks[-1].code == "catalog_read_failed"
+
+
+def test_doctor_reports_unknown_when_a_referenced_blob_cannot_be_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    paths = CorpusPaths.from_data_root(tmp_path / "corpus")
+    store = FilesystemBlobStore(paths)
+    ref = store.put(BlobWrite(content=b"referenced", media_type="text/plain"))
+    _create_catalog(
+        paths,
+        ((str(ref.sha256), ref.size_bytes, ref.media_type, ref.relative_path.as_posix()),),
+    )
+    real_open = os.open
+
+    def deny_blob_open(
+        path: str | bytes | Path, flags: int, *args: object, **kwargs: object
+    ) -> int:
+        if path == ref.relative_path.name and kwargs.get("dir_fd") is not None:
+            raise PermissionError("injected blob access denial")
+        return real_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(os, "open", deny_blob_open)
+    stdout = io.StringIO()
+
+    exit_code = main(
+        ["doctor", "--json"],
+        environ={"PAPER_INSIGHTS_DATA_ROOT": str(paths.data_root)},
+        stdout=stdout,
+        stderr=io.StringIO(),
+    )
+
+    payload = json.loads(stdout.getvalue())
+    assert exit_code == 6
+    assert payload["data"]["status"] == "UNKNOWN"
+    assert payload["data"]["checks"][-1] == {
+        "code": "referenced_blob_unavailable",
+        "name": "referenced_blobs",
+        "status": "UNKNOWN",
+    }
+
+
+def test_doctor_reports_invalid_for_a_stable_blob_tree_symlink(tmp_path: Path) -> None:
+    paths = CorpusPaths.from_data_root(tmp_path / "corpus")
+    store = FilesystemBlobStore(paths)
+    ref = store.put(BlobWrite(content=b"referenced", media_type="text/plain"))
+    _create_catalog(
+        paths,
+        ((str(ref.sha256), ref.size_bytes, ref.media_type, ref.relative_path.as_posix()),),
+    )
+    moved = tmp_path / "moved-blobs"
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    paths.blobs.rename(moved)
+    paths.blobs.symlink_to(outside, target_is_directory=True)
+    stdout = io.StringIO()
+
+    exit_code = main(
+        ["doctor", "--json"],
+        environ={"PAPER_INSIGHTS_DATA_ROOT": str(paths.data_root)},
+        stdout=stdout,
+        stderr=io.StringIO(),
+    )
+
+    payload = json.loads(stdout.getvalue())
+    assert exit_code == 6
+    assert payload["data"]["status"] == "INVALID"
+    assert payload["data"]["checks"][-1] == {
+        "code": "referenced_blob_corrupt",
+        "name": "referenced_blobs",
+        "status": "INVALID",
+    }
+
+
+def test_doctor_reports_invalid_for_a_stable_blob_file_symlink(tmp_path: Path) -> None:
+    paths = CorpusPaths.from_data_root(tmp_path / "corpus")
+    store = FilesystemBlobStore(paths)
+    ref = store.put(BlobWrite(content=b"referenced", media_type="text/plain"))
+    _create_catalog(
+        paths,
+        ((str(ref.sha256), ref.size_bytes, ref.media_type, ref.relative_path.as_posix()),),
+    )
+    target = paths.confined(ref.relative_path)
+    moved = tmp_path / "moved-blob"
+    outside = tmp_path / "outside-blob"
+    outside.write_bytes(b"outside")
+    target.rename(moved)
+    target.symlink_to(outside)
+    stdout = io.StringIO()
+
+    exit_code = main(
+        ["doctor", "--json"],
+        environ={"PAPER_INSIGHTS_DATA_ROOT": str(paths.data_root)},
+        stdout=stdout,
+        stderr=io.StringIO(),
+    )
+
+    payload = json.loads(stdout.getvalue())
+    assert exit_code == 6
+    assert payload["data"]["status"] == "INVALID"
+    assert payload["data"]["checks"][-1] == {
+        "code": "referenced_blob_corrupt",
+        "name": "referenced_blobs",
+        "status": "INVALID",
+    }
+
+
+def test_doctor_reports_unknown_when_orphan_scan_binding_changes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    paths = CorpusPaths.from_data_root(tmp_path / "corpus")
+    store = FilesystemBlobStore(paths)
+    referenced = store.put(BlobWrite(content=b"referenced", media_type="text/plain"))
+    orphan = store.put(BlobWrite(content=b"orphan", media_type="text/plain"))
+    assert str(referenced.sha256)[:2] != str(orphan.sha256)[:2]
+    _create_catalog(
+        paths,
+        (
+            (
+                str(referenced.sha256),
+                referenced.size_bytes,
+                referenced.media_type,
+                referenced.relative_path.as_posix(),
+            ),
+        ),
+    )
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    target_name = str(orphan.sha256)[:2]
+    target = paths.blobs / target_name
+    moved = tmp_path / "moved-blob-directory"
+    real_open = os.open
+    swapped = False
+
+    def swap_before_open(
+        path: str | bytes | Path, flags: int, *args: object, **kwargs: object
+    ) -> int:
+        nonlocal swapped
+        if path == target_name and kwargs.get("dir_fd") is not None and not swapped:
+            target.rename(moved)
+            target.symlink_to(outside, target_is_directory=True)
+            swapped = True
+        return real_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(os, "open", swap_before_open)
+    stdout = io.StringIO()
+
+    exit_code = main(
+        ["doctor", "--json"],
+        environ={"PAPER_INSIGHTS_DATA_ROOT": str(paths.data_root)},
+        stdout=stdout,
+        stderr=io.StringIO(),
+    )
+
+    payload = json.loads(stdout.getvalue())
+    assert swapped
+    assert exit_code == 6
+    assert payload["data"]["status"] == "UNKNOWN"
+    assert payload["data"]["checks"][-1] == {
+        "code": "orphan_proof_unavailable",
+        "name": "orphaned_blobs",
+        "status": "UNKNOWN",
+    }
+    assert tuple(outside.iterdir()) == ()
+
+
+def test_doctor_reports_unknown_when_catalog_binding_changes_before_open(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    paths = CorpusPaths.from_data_root(tmp_path / "corpus")
+    paths.data_root.mkdir()
+    _create_catalog(paths, ())
+    outside_catalog = tmp_path / "outside.sqlite3"
+    outside_connection = sqlite3.connect(outside_catalog)
+    outside_connection.execute(
+        "CREATE TABLE stored_blobs ("
+        "sha256 TEXT NOT NULL, size_bytes INTEGER NOT NULL, "
+        "media_type TEXT NOT NULL, relative_path TEXT NOT NULL)"
+    )
+    outside_connection.commit()
+    outside_connection.close()
+    original_catalog = tmp_path / "original-catalog.sqlite3"
+    real_connect = sqlite3.connect
+    swapped = False
+
+    def swap_catalog_before_connect(*args: object, **kwargs: object) -> sqlite3.Connection:
+        nonlocal swapped
+        if not swapped:
+            paths.catalog.rename(original_catalog)
+            paths.catalog.symlink_to(outside_catalog)
+            swapped = True
+        return real_connect(*args, **kwargs)
+
+    monkeypatch.setattr(sqlite3, "connect", swap_catalog_before_connect)
+    stdout = io.StringIO()
+
+    exit_code = main(
+        ["doctor", "--json"],
+        environ={"PAPER_INSIGHTS_DATA_ROOT": str(paths.data_root)},
+        stdout=stdout,
+        stderr=io.StringIO(),
+    )
+
+    payload = json.loads(stdout.getvalue())
+    assert swapped
+    assert exit_code == 6
+    assert payload["data"]["status"] == "UNKNOWN"
+    assert payload["data"]["checks"][1] == {
+        "code": "catalog_read_unavailable",
+        "name": "catalog",
+        "status": "UNKNOWN",
+    }
+
+
+def test_catalog_diagnostic_gives_sqlite_a_preopened_descriptor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    paths = CorpusPaths.from_data_root(tmp_path / "corpus")
+    paths.data_root.mkdir()
+    _create_catalog(paths, ())
+    real_connect = sqlite3.connect
+    opened_database = ""
+
+    def record_database(*args: object, **kwargs: object) -> sqlite3.Connection:
+        nonlocal opened_database
+        opened_database = str(args[0])
+        return real_connect(*args, **kwargs)
+
+    monkeypatch.setattr(sqlite3, "connect", record_database)
+
+    probe = SqliteCatalogDiagnostics(paths).inspect()
+
+    assert probe.status == "OK"
+    assert opened_database.startswith("file:///dev/fd/")
+
+
+def test_catalog_diagnostic_is_unknown_when_data_root_changes_during_open(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    paths = CorpusPaths.from_data_root(tmp_path / "corpus")
+    paths.data_root.mkdir()
+    _create_catalog(paths, ())
+    replacement_paths = CorpusPaths.from_data_root(tmp_path / "replacement")
+    replacement_paths.data_root.mkdir()
+    _create_catalog(replacement_paths, ())
+    moved = tmp_path / "moved-corpus"
+    real_open = os.open
+    swapped = False
+
+    def swap_before_open(
+        path: str | bytes | Path, flags: int, *args: object, **kwargs: object
+    ) -> int:
+        nonlocal swapped
+        if path == paths.data_root.name and kwargs.get("dir_fd") is not None and not swapped:
+            paths.data_root.rename(moved)
+            replacement_paths.data_root.rename(paths.data_root)
+            swapped = True
+        return real_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(os, "open", swap_before_open)
+
+    probe = SqliteCatalogDiagnostics(paths).inspect()
+
+    assert swapped
+    assert probe.status == "UNKNOWN"
+    assert probe.checks[-1].code == "catalog_read_unavailable"

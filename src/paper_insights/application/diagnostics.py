@@ -10,6 +10,10 @@ from paper_insights.domain.identifiers import Sha256
 DoctorStatus = Literal["OK", "UNKNOWN", "INVALID"]
 
 
+class DiagnosticUnavailableError(OSError):
+    """A read-only diagnostic could not obtain conclusive local evidence."""
+
+
 @dataclass(frozen=True, slots=True)
 class DoctorCheck:
     name: str
@@ -85,7 +89,10 @@ class DoctorService:
             )
 
         for ref in catalog.referenced_blobs:
-            inspection = self._blobs.inspect(ref)
+            try:
+                inspection = self._blobs.inspect(ref)
+            except DiagnosticUnavailableError:
+                return self._unknown_blob_report(catalog, "referenced_blob_unavailable")
             if not inspection.exists:
                 return self._invalid_blob_report(catalog, "referenced_blob_missing")
             if not inspection.valid:
@@ -94,6 +101,15 @@ class DoctorService:
         referenced = frozenset(ref.sha256 for ref in catalog.referenced_blobs)
         try:
             orphans = self._blobs.find_orphans(referenced)
+        except DiagnosticUnavailableError:
+            return DoctorReport(
+                status="UNKNOWN",
+                checks=(
+                    *catalog.checks,
+                    DoctorCheck("orphaned_blobs", "UNKNOWN", "orphan_proof_unavailable"),
+                ),
+                orphaned_blob_count=None,
+            )
         except OSError:
             return DoctorReport(
                 status="INVALID",
@@ -115,5 +131,13 @@ class DoctorService:
         return DoctorReport(
             status="INVALID",
             checks=(*catalog.checks, DoctorCheck("referenced_blobs", "INVALID", code)),
+            orphaned_blob_count=None,
+        )
+
+    @staticmethod
+    def _unknown_blob_report(catalog: CatalogProbe, code: str) -> DoctorReport:
+        return DoctorReport(
+            status="UNKNOWN",
+            checks=(*catalog.checks, DoctorCheck("referenced_blobs", "UNKNOWN", code)),
             orphaned_blob_count=None,
         )
