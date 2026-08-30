@@ -94,7 +94,7 @@ Les signatures publiques et DTO de frontière sont figés dans [PORTS.md](specs/
 
 ## Transactions catalogue
 
-Toutes les connexions catalogue activent `foreign_keys=ON`, un `busy_timeout` configuré, WAL et `synchronous=FULL`. Les writers utilisent `BEGIN IMMEDIATE`; un seul propriétaire produit les modèles SQLAlchemy et les migrations Alembic.
+Toutes les connexions catalogue activent `foreign_keys=ON`, un `busy_timeout` configuré, WAL et `synchronous=FULL`. Le moteur ouvre uniquement une base existante en `mode=rw` et vérifie l'identité du fichier régulier avant et après la configuration de chaque connexion; un remplacement par lien symbolique ou par un autre inode échoue avant les PRAGMA mutantes. Les writers utilisent `BEGIN IMMEDIATE`; un seul propriétaire produit les modèles SQLAlchemy et les migrations Alembic.
 
 `catalog_meta.revision` commence à zéro après migration. Une transaction validée qui contient au moins une mutation visible l'incrémente exactement une fois dans la même transaction. Une lecture, un no-op, un rollback ou un échec ne l'incrémente pas.
 

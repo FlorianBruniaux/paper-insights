@@ -31,6 +31,7 @@ Toutes les modifications notables du projet sont consignées ici.
 
 - The arXiv adapter scopes DOI identifiers to the paper while retaining each DOI observation on its exact version, allowing multiple arXiv revisions to share the same DOI without a catalog conflict.
 - Paper search hits now carry their source, ordered authors and scoped canonical identifiers directly from the fingerprinted `fts-v2` projection.
+- Catalog connections now open only an existing database and reject file or symlink binding changes before applying writable SQLite pragmas.
 - `docs/DEVELOPMENT.md` et l'ancien plan vertical pointent désormais vers le plan complet comme seule autorité d'exécution.
 - `doctor` est spécifié strictement read-only; la récupération passe par `repair interrupted-runs --yes`.
 - Le manifeste de découverte distingue chaque capture, la création de run attache ses snapshots dans une transaction unique et l'index FTS se publie comme une base auto-descriptive unique.
