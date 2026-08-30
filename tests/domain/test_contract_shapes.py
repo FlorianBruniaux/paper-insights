@@ -14,6 +14,7 @@ from paper_insights import domain
 from paper_insights.application import ports
 from paper_insights.domain.acquisition import DiscoveryQuery
 from paper_insights.domain.identifiers import (
+    CollectionId,
     PaperId,
     PaperVersionId,
     PassageId,
@@ -25,6 +26,7 @@ from paper_insights.domain.retrieval import (
     CatalogRevision,
     CoverageStatus,
     IndexCandidate,
+    IndexDocument,
     IndexReceipt,
     PaperSearchHit,
     PaperSearchQuery,
@@ -34,6 +36,8 @@ from paper_insights.domain.retrieval import (
     SearchFilters,
     passage_id,
 )
+
+NOW = datetime(2026, 8, 30, 12, 0, tzinfo=UTC)
 
 
 def make_result(**changes: object) -> PaperSearchResult:
@@ -108,6 +112,54 @@ def test_search_query_has_closed_filters_and_index_candidate_has_receipt() -> No
 
     assert query.filters.category == "cs.AI"
     assert candidate.receipt.catalog_revision == candidate.catalog_revision
+
+
+def test_index_document_carries_the_complete_filter_projection() -> None:
+    collection_id = CollectionId(UUID("01890f3e-3b12-7cc0-98d6-4f6f94748f50"))
+    document = IndexDocument(
+        paper_id=PaperId(UUID("01890f3e-3b12-7cc0-98d6-4f6f94748f51")),
+        paper_version_id=PaperVersionId(UUID("01890f3e-3b12-7cc0-98d6-4f6f94748f52")),
+        version_observation_id=VersionObservationId(UUID("01890f3e-3b12-7cc0-98d6-4f6f94748f53")),
+        source_id=SourceId("arxiv"),
+        title="Evidence agents",
+        abstract="Stable local evidence.",
+        metadata_artifact_sha256=Sha256("a" * 64),
+        authors=("Ada Lovelace",),
+        categories=("cs.AI",),
+        language="en",
+        submitted_at=NOW,
+        collection_ids=(collection_id,),
+        collection_slugs=("reading",),
+    )
+
+    assert document.source_id == SourceId("arxiv")
+    assert document.authors == ("Ada Lovelace",)
+    assert document.categories == ("cs.AI",)
+    assert document.submitted_at == NOW
+    assert document.collection_ids == (collection_id,)
+    assert document.collection_slugs == ("reading",)
+
+    with pytest.raises(ValueError, match="immutable tuple"):
+        IndexDocument(
+            **{
+                **{field.name: getattr(document, field.name) for field in fields(document)},
+                "authors": ["mutable"],
+            }
+        )
+    with pytest.raises(ValueError, match="categories"):
+        IndexDocument(
+            **{
+                **{field.name: getattr(document, field.name) for field in fields(document)},
+                "categories": ("cs.AI", "cs.AI"),
+            }
+        )
+    with pytest.raises(ValueError, match="UTC"):
+        IndexDocument(
+            **{
+                **{field.name: getattr(document, field.name) for field in fields(document)},
+                "submitted_at": datetime(2026, 8, 30, 12, 0),
+            }
+        )
 
 
 def test_search_rejects_blank_query_excess_hits_and_bad_rank_order() -> None:

@@ -217,7 +217,7 @@ class SqliteCatalogSnapshot:
         connection = self._require_open()
         version_rows = connection.execute(
             sa.text(
-                "SELECT pv.id, pv.paper_id FROM paper_versions AS pv "
+                "SELECT pv.id, pv.paper_id, pv.source_id FROM paper_versions AS pv "
                 "WHERE pv.is_current = 1 ORDER BY pv.paper_id, pv.source_id, pv.id"
             )
         ).mappings()
@@ -226,11 +226,12 @@ class SqliteCatalogSnapshot:
             observation = (
                 connection.execute(
                     sa.text(
-                        "SELECT vo.id, vo.title, vo.abstract, b.sha256 "
+                        "SELECT vo.id, vo.title, vo.abstract, vo.language, vo.submitted_at, "
+                        "b.sha256 "
                         "FROM version_observations AS vo "
-                        "JOIN artifacts AS a ON a.version_observation_id = vo.id "
+                        "LEFT JOIN artifacts AS a ON a.version_observation_id = vo.id "
                         "AND a.kind = 'metadata' "
-                        "JOIN stored_blobs AS b ON b.id = a.stored_blob_id "
+                        "LEFT JOIN stored_blobs AS b ON b.id = a.stored_blob_id "
                         "WHERE vo.paper_version_id = :version_id "
                         "ORDER BY vo.observed_at DESC, vo.id DESC LIMIT 1"
                     ),
@@ -239,16 +240,50 @@ class SqliteCatalogSnapshot:
                 .mappings()
                 .one_or_none()
             )
-            if observation is None:
+            if observation is None or observation["sha256"] is None:
                 raise RuntimeError(f"current version {version['id']} has no metadata artifact")
+            author_rows = connection.execute(
+                sa.text(
+                    "SELECT raw_name FROM paper_authors "
+                    "WHERE version_observation_id = :observation_id ORDER BY position"
+                ),
+                {"observation_id": observation["id"]},
+            ).scalars()
+            category_rows = connection.execute(
+                sa.text(
+                    "SELECT category FROM paper_version_categories "
+                    "WHERE version_observation_id = :observation_id ORDER BY position"
+                ),
+                {"observation_id": observation["id"]},
+            ).scalars()
+            collection_rows = connection.execute(
+                sa.text(
+                    "SELECT c.id, c.slug FROM collection_papers AS cp "
+                    "JOIN collections AS c ON c.id = cp.collection_id "
+                    "WHERE cp.paper_id = :paper_id ORDER BY c.slug, c.id"
+                ),
+                {"paper_id": version["paper_id"]},
+            ).mappings()
+            collections = tuple(collection_rows)
             documents.append(
                 IndexDocument(
                     paper_id=PaperId(UUID(version["paper_id"])),
                     paper_version_id=PaperVersionId(UUID(version["id"])),
                     version_observation_id=VersionObservationId(UUID(observation["id"])),
+                    source_id=SourceId(version["source_id"]),
                     title=observation["title"],
                     abstract=observation["abstract"],
                     metadata_artifact_sha256=Sha256(observation["sha256"]),
+                    authors=tuple(author_rows),
+                    categories=tuple(category_rows),
+                    language=observation["language"],
+                    submitted_at=(
+                        datetime.fromisoformat(observation["submitted_at"])
+                        if observation["submitted_at"] is not None
+                        else None
+                    ),
+                    collection_ids=tuple(CollectionId(UUID(row["id"])) for row in collections),
+                    collection_slugs=tuple(row["slug"] for row in collections),
                 )
             )
         return tuple(documents)
@@ -315,15 +350,31 @@ class SqliteCatalogSnapshot:
                 sa.text("SELECT id FROM papers WHERE id = :id"),
                 {"id": str(selector.paper_id)},
             ).scalar_one_or_none()
+        elif selector.doi is not None:
+            values = tuple(
+                connection.execute(
+                    sa.text(
+                        "SELECT paper_id FROM paper_identifiers "
+                        "WHERE scheme = 'doi' AND canonical_value = :canonical "
+                        "UNION "
+                        "SELECT pv.paper_id FROM version_identifiers AS vi "
+                        "JOIN paper_versions AS pv ON pv.id = vi.paper_version_id "
+                        "WHERE vi.scheme = 'doi' AND vi.canonical_value = :canonical "
+                        "ORDER BY paper_id"
+                    ),
+                    {"canonical": selector.doi},
+                ).scalars()
+            )
+            if len(values) > 1:
+                raise CatalogConflict()
+            value = values[0] if values else None
         else:
-            scheme = "arxiv" if selector.arxiv_id is not None else "doi"
-            canonical = selector.arxiv_id if selector.arxiv_id is not None else selector.doi
             value = connection.execute(
                 sa.text(
                     "SELECT paper_id FROM paper_identifiers "
-                    "WHERE scheme = :scheme AND canonical_value = :canonical"
+                    "WHERE scheme = 'arxiv' AND canonical_value = :canonical"
                 ),
-                {"scheme": scheme, "canonical": canonical},
+                {"canonical": selector.arxiv_id},
             ).scalar_one_or_none()
         return PaperId(UUID(value)) if value is not None else None
 

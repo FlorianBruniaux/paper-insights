@@ -19,7 +19,13 @@ from paper_insights.adapters.catalog.sqlite.readers import (
 )
 from paper_insights.adapters.catalog.sqlite.uow import SqliteCatalogUnitOfWorkFactory
 from paper_insights.domain.corpus import CitationSelector, CreateCollection
-from paper_insights.domain.identifiers import PaperId, PaperSelector, PaperVersionId
+from paper_insights.domain.identifiers import (
+    CollectionId,
+    PaperId,
+    PaperSelector,
+    PaperVersionId,
+    SourceId,
+)
 from paper_insights.domain.retrieval import CatalogRevision
 
 NOW = datetime(2026, 8, 29, 8, 0, tzinfo=UTC)
@@ -105,6 +111,9 @@ def test_snapshot_reconstructs_versioned_paper_index_and_citation(engine: Engine
     normalized = "a" * 64
     raw = "b" * 64
     now = NOW.isoformat()
+    older = datetime(2026, 8, 28, 8, 0, tzinfo=UTC).isoformat()
+    first_collection_id = UUID("01890f3b-0000-7000-8000-000000000110")
+    second_collection_id = UUID("01890f3b-0000-7000-8000-000000000111")
     with engine.begin() as connection:
         connection.execute(
             sa.text("INSERT INTO papers (id, created_at) VALUES (:id, :now)"),
@@ -183,9 +192,10 @@ def test_snapshot_reconstructs_versioned_paper_index_and_citation(engine: Engine
                 "(id, paper_version_id, normalized_sha256, observed_at, origin_source_id, "
                 "origin_run_id, "
                 "origin_source_snapshot_id, origin_record_ordinal, title, title_normalized, "
-                "abstract, source_url) VALUES (:id, :version_id, :sha, :now, 'arxiv', :run, "
+                "abstract, language, submitted_at, source_url) VALUES "
+                "(:id, :version_id, :sha, :now, 'arxiv', :run, "
                 ":snapshot, 0, 'Exact title', 'exact title', 'Exact abstract', "
-                "'https://arxiv.org/abs/2608.00001')"
+                "'en', :submitted_at, 'https://arxiv.org/abs/2608.00001')"
             ),
             {
                 "id": str(observation_id),
@@ -194,8 +204,109 @@ def test_snapshot_reconstructs_versioned_paper_index_and_citation(engine: Engine
                 "now": now,
                 "run": str(run_id),
                 "snapshot": str(snapshot_id),
+                "submitted_at": now,
             },
         )
+        older_observation_id = UUID("01890f3b-0000-7000-8000-000000000090")
+        older_blob_id = UUID("01890f3b-0000-7000-8000-000000000091")
+        older_artifact_id = UUID("01890f3b-0000-7000-8000-000000000092")
+        connection.execute(
+            sa.text(
+                "INSERT INTO stored_blobs "
+                "(id, sha256, size_bytes, media_type, relative_path, created_at) "
+                "VALUES (:id, :sha, 10, 'application/json', 'blobs/ff/older', :now)"
+            ),
+            {"id": str(older_blob_id), "sha": "f" * 64, "now": older},
+        )
+        connection.execute(
+            sa.text(
+                "INSERT INTO version_observations "
+                "(id, paper_version_id, normalized_sha256, observed_at, origin_source_id, "
+                "origin_run_id, origin_source_snapshot_id, origin_record_ordinal, title, "
+                "title_normalized, abstract, language, submitted_at) VALUES "
+                "(:id, :version, :sha, :observed_at, 'arxiv', :run, :snapshot, 0, "
+                "'Stale title', 'stale title', 'Stale abstract', 'fr', :submitted_at)"
+            ),
+            {
+                "id": str(older_observation_id),
+                "version": str(version_id),
+                "sha": "f" * 64,
+                "observed_at": older,
+                "run": str(run_id),
+                "snapshot": str(snapshot_id),
+                "submitted_at": older,
+            },
+        )
+        connection.execute(
+            sa.text(
+                "INSERT INTO artifacts "
+                "(id, paper_version_id, version_observation_id, stored_blob_id, kind, "
+                "created_at) VALUES (:id, :version, :observation, :blob, 'metadata', :now)"
+            ),
+            {
+                "id": str(older_artifact_id),
+                "version": str(version_id),
+                "observation": str(older_observation_id),
+                "blob": str(older_blob_id),
+                "now": older,
+            },
+        )
+        for position, author_id, raw_name in (
+            (2, "01890f3b-0000-7000-8000-000000000121", "Grace Hopper"),
+            (1, "01890f3b-0000-7000-8000-000000000120", "Ada Lovelace"),
+        ):
+            connection.execute(
+                sa.text("INSERT INTO authors (id, created_at) VALUES (:id, :now)"),
+                {"id": author_id, "now": now},
+            )
+            connection.execute(
+                sa.text(
+                    "INSERT INTO paper_authors "
+                    "(version_observation_id, position, author_id, raw_name) "
+                    "VALUES (:observation, :position, :author, :raw_name)"
+                ),
+                {
+                    "observation": str(observation_id),
+                    "position": position,
+                    "author": author_id,
+                    "raw_name": raw_name,
+                },
+            )
+        for position, category, is_primary in (
+            (2, "cs.LG", 0),
+            (1, "cs.AI", 1),
+        ):
+            connection.execute(
+                sa.text(
+                    "INSERT INTO paper_version_categories "
+                    "(version_observation_id, position, category, is_primary) "
+                    "VALUES (:observation, :position, :category, :is_primary)"
+                ),
+                {
+                    "observation": str(observation_id),
+                    "position": position,
+                    "category": category,
+                    "is_primary": is_primary,
+                },
+            )
+        for collection_id, slug, title in (
+            (second_collection_id, "zeta", "Zeta"),
+            (first_collection_id, "alpha", "Alpha"),
+        ):
+            connection.execute(
+                sa.text(
+                    "INSERT INTO collections (id, slug, title, created_at, updated_at) "
+                    "VALUES (:id, :slug, :title, :now, :now)"
+                ),
+                {"id": str(collection_id), "slug": slug, "title": title, "now": now},
+            )
+            connection.execute(
+                sa.text(
+                    "INSERT INTO collection_papers (collection_id, paper_id, added_at) "
+                    "VALUES (:collection, :paper, :now)"
+                ),
+                {"collection": str(collection_id), "paper": str(paper_id), "now": now},
+            )
         connection.execute(
             sa.text(
                 "INSERT INTO artifacts "
@@ -228,6 +339,22 @@ def test_snapshot_reconstructs_versioned_paper_index_and_citation(engine: Engine
         )
         connection.execute(
             sa.text(
+                "INSERT INTO version_identifiers "
+                "(paper_version_id, scheme, canonical_value) "
+                "VALUES (:version, 'doi', '10.1000/version-only')"
+            ),
+            {"version": str(version_id)},
+        )
+        connection.execute(
+            sa.text(
+                "INSERT INTO version_identifiers "
+                "(paper_version_id, scheme, canonical_value) "
+                "VALUES (:version, 'doi', '10.1000/catalog')"
+            ),
+            {"version": str(version_id)},
+        )
+        connection.execute(
+            sa.text(
                 "UPDATE snapshot_records SET version_observation_id = :observation_id "
                 "WHERE source_snapshot_id = :snapshot_id AND ordinal = 0"
             ),
@@ -244,16 +371,82 @@ def test_snapshot_reconstructs_versioned_paper_index_and_citation(engine: Engine
         citation = snapshot.get_citation_input(
             CitationSelector(paper=PaperSelector(paper_id=paper_id))
         )
+        version_only_citation = snapshot.get_citation_input(
+            CitationSelector(paper=PaperSelector.by_doi("10.1000/version-only"))
+        )
+        deduplicated_citation = snapshot.get_citation_input(
+            CitationSelector(paper=PaperSelector.by_doi("10.1000/catalog"))
+        )
 
     assert paper is not None
     assert paper.identity.paper_id == paper_id
-    assert paper.observations[0].observed.title == "Exact title"
-    assert paper.artifacts[0].sha256.value == normalized
+    assert tuple(observation.observed.title for observation in paper.observations) == (
+        "Stale title",
+        "Exact title",
+    )
+    assert {artifact.sha256.value for artifact in paper.artifacts} == {normalized, "f" * 64}
     assert len(documents) == 1
-    assert documents[0].version_observation_id.value == observation_id
+    document = documents[0]
+    assert document.version_observation_id.value == observation_id
+    assert document.source_id == SourceId("arxiv")
+    assert document.title == "Exact title"
+    assert document.authors == ("Ada Lovelace", "Grace Hopper")
+    assert document.categories == ("cs.AI", "cs.LG")
+    assert document.language == "en"
+    assert document.submitted_at == NOW
+    assert document.collection_ids == (
+        CollectionId(first_collection_id),
+        CollectionId(second_collection_id),
+    )
+    assert document.collection_slugs == ("alpha", "zeta")
     assert citation is not None
     assert citation.snapshot_id.value == snapshot_id
     assert citation.source_item_id == "2608.00001"
+    assert version_only_citation is not None
+    assert version_only_citation.paper_id == paper_id
+    assert deduplicated_citation is not None
+    assert deduplicated_citation.paper_id == paper_id
+
+    collision_paper_id = UUID("01890f3b-0000-7000-8000-000000000130")
+    collision_version_id = UUID("01890f3b-0000-7000-8000-000000000131")
+    with engine.begin() as connection:
+        connection.execute(
+            sa.text(
+                "INSERT INTO paper_identifiers (paper_id, scheme, canonical_value) "
+                "VALUES (:paper, 'doi', '10.1000/cross-table')"
+            ),
+            {"paper": str(paper_id)},
+        )
+        connection.execute(
+            sa.text("INSERT INTO papers (id, created_at) VALUES (:id, :now)"),
+            {"id": str(collision_paper_id), "now": now},
+        )
+        connection.execute(
+            sa.text(
+                "INSERT INTO paper_versions "
+                "(id, paper_id, source_id, source_version_key, is_current, created_at) "
+                "VALUES (:id, :paper, 'arxiv', '2608.00002v1', 1, :now)"
+            ),
+            {
+                "id": str(collision_version_id),
+                "paper": str(collision_paper_id),
+                "now": now,
+            },
+        )
+        connection.execute(
+            sa.text(
+                "INSERT INTO version_identifiers "
+                "(paper_version_id, scheme, canonical_value) "
+                "VALUES (:version, 'doi', '10.1000/cross-table')"
+            ),
+            {"version": str(collision_version_id)},
+        )
+
+    with reader.snapshot() as collision_snapshot:
+        with pytest.raises(CatalogConflict, match="catalog_conflict"):
+            collision_snapshot.get_citation_input(
+                CitationSelector(paper=PaperSelector.by_doi("10.1000/cross-table"))
+            )
 
     with engine.begin() as connection:
         connection.execute(

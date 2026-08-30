@@ -10,6 +10,7 @@ import sqlalchemy as sa
 from sqlalchemy import Engine
 from sqlalchemy.exc import OperationalError
 
+from paper_insights.adapters.catalog.sqlite.errors import CatalogConflict
 from paper_insights.adapters.catalog.sqlite.uow import SqliteCatalogUnitOfWorkFactory
 from paper_insights.domain.corpus import (
     AddCollectionPaper,
@@ -140,6 +141,7 @@ def test_second_writer_respects_busy_timeout_without_corrupting_counts(engine: E
 
 def test_collection_mutations_change_revision_only_when_state_changes(engine: Engine) -> None:
     paper_id = PaperId(IDS[6])
+    version_id = IDS[8]
     with engine.begin() as connection:
         connection.execute(
             sa.text("INSERT INTO papers (id, created_at) VALUES (:id, :created_at)"),
@@ -147,10 +149,23 @@ def test_collection_mutations_change_revision_only_when_state_changes(engine: En
         )
         connection.execute(
             sa.text(
-                "INSERT INTO paper_identifiers (paper_id, scheme, canonical_value) "
-                "VALUES (:paper_id, 'doi', '10.1000/catalog-test')"
+                "INSERT INTO paper_versions "
+                "(id, paper_id, source_id, source_version_key, is_current, created_at) "
+                "VALUES (:id, :paper_id, 'arxiv', '2608.10001v1', 1, :created_at)"
             ),
-            {"paper_id": str(paper_id)},
+            {
+                "id": str(version_id),
+                "paper_id": str(paper_id),
+                "created_at": NOW.isoformat(),
+            },
+        )
+        connection.execute(
+            sa.text(
+                "INSERT INTO version_identifiers "
+                "(paper_version_id, scheme, canonical_value) "
+                "VALUES (:version_id, 'doi', '10.1000/catalog-test')"
+            ),
+            {"version_id": str(version_id)},
         )
     factory = _factory(engine, IDS[7])
 
@@ -205,3 +220,61 @@ def test_collection_mutations_change_revision_only_when_state_changes(engine: En
 
     assert removed.paper_count == 0
     assert _revision(engine) == 3
+
+
+def test_collection_doi_resolution_rejects_cross_table_paper_collision(
+    engine: Engine,
+) -> None:
+    first_paper = PaperId(IDS[10])
+    second_paper = PaperId(IDS[11])
+    second_version = IDS[12]
+    with engine.begin() as connection:
+        for paper_id in (first_paper, second_paper):
+            connection.execute(
+                sa.text("INSERT INTO papers (id, created_at) VALUES (:id, :created_at)"),
+                {"id": str(paper_id), "created_at": NOW.isoformat()},
+            )
+        connection.execute(
+            sa.text(
+                "INSERT INTO paper_identifiers (paper_id, scheme, canonical_value) "
+                "VALUES (:paper_id, 'doi', '10.1000/cross-table')"
+            ),
+            {"paper_id": str(first_paper)},
+        )
+        connection.execute(
+            sa.text(
+                "INSERT INTO paper_versions "
+                "(id, paper_id, source_id, source_version_key, is_current, created_at) "
+                "VALUES (:id, :paper_id, 'arxiv', '2608.10002v1', 1, :created_at)"
+            ),
+            {
+                "id": str(second_version),
+                "paper_id": str(second_paper),
+                "created_at": NOW.isoformat(),
+            },
+        )
+        connection.execute(
+            sa.text(
+                "INSERT INTO version_identifiers "
+                "(paper_version_id, scheme, canonical_value) "
+                "VALUES (:version_id, 'doi', '10.1000/cross-table')"
+            ),
+            {"version_id": str(second_version)},
+        )
+
+    factory = _factory(engine, IDS[13])
+    with factory.begin() as uow:
+        collection = uow.collections.create(CreateCollection(slug="ambiguous", title="Ambiguous"))
+        uow.commit()
+    before_revision = _revision(engine)
+
+    with pytest.raises(CatalogConflict, match="catalog_conflict"):
+        with factory.begin() as uow:
+            uow.collections.add(
+                AddCollectionPaper(
+                    collection_id=collection.collection_id,
+                    selector=PaperSelector.by_doi("10.1000/cross-table"),
+                )
+            )
+
+    assert _revision(engine) == before_revision

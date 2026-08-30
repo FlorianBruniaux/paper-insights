@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Protocol
 
 from paper_insights.domain.identifiers import (
+    CollectionId,
     PaperId,
     PaperVersionId,
     PassageId,
@@ -87,13 +88,41 @@ class IndexDocument:
     paper_id: PaperId
     paper_version_id: PaperVersionId
     version_observation_id: VersionObservationId
+    source_id: SourceId
     title: str
     abstract: str | None
     metadata_artifact_sha256: Sha256
+    authors: tuple[str, ...] = ()
+    categories: tuple[str, ...] = ()
+    language: str | None = None
+    submitted_at: datetime | None = None
+    collection_ids: tuple[CollectionId, ...] = ()
+    collection_slugs: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
+        require_tuples(
+            self,
+            "authors",
+            "categories",
+            "collection_ids",
+            "collection_slugs",
+        )
         if not self.title.strip():
             raise ValueError("index document title is required")
+        if any(not value.strip() for value in (*self.authors, *self.categories)):
+            raise ValueError("index document author and category values cannot be blank")
+        if len(set(self.categories)) != len(self.categories):
+            raise ValueError("index document categories must be unique")
+        if self.language is not None and not self.language.strip():
+            raise ValueError("index document language cannot be blank")
+        if self.submitted_at is not None and self.submitted_at.utcoffset() != timedelta(0):
+            raise ValueError("index document submitted_at must use UTC")
+        if len(set(self.collection_ids)) != len(self.collection_ids):
+            raise ValueError("index document collection IDs must be unique")
+        if any(not value.strip() for value in self.collection_slugs):
+            raise ValueError("index document collection slugs cannot be blank")
+        if len(set(self.collection_slugs)) != len(self.collection_slugs):
+            raise ValueError("index document collection slugs must be unique")
 
 
 @dataclass(frozen=True, slots=True)
