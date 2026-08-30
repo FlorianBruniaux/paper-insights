@@ -1,0 +1,54 @@
+tests/config/test_settings.py
+  s_2f2b8a177ba283::t_f1c83289053f38 60-70
+  s_2f2b8a177ba283::t_86eb0336704e7b 1-59
+src/paper_insights/adapters/artifacts/filesystem/store.py
+  s_2f2b8a177ba283::t_05dc45815be1e2 1-197
+src/paper_insights/interfaces/cli/app.py
+  s_2f2b8a177ba283::t_16de4e6b6a25d6 1-6,8,10-55
+  s_2f2b8a177ba283::t_0cdbd18947989f 7,9
+src/paper_insights/adapters/artifacts/filesystem/__init__.py
+  s_2f2b8a177ba283::t_05dc45815be1e2 1-3
+tests/cli/test_doctor.py
+  s_2f2b8a177ba283::t_9af401ed9a925c 158-196
+  s_2f2b8a177ba283::t_bd491f6712424c 1-114,116-122,124-130,132-137
+  s_2f2b8a177ba283::t_f1c83289053f38 138-157
+  s_2f2b8a177ba283::t_0cdbd18947989f 115,123,131
+src/paper_insights/interfaces/cli/doctor.py
+  s_2f2b8a177ba283::t_9a1c864c2572e0 65-73
+  s_2f2b8a177ba283::t_177c781a4e7168 87-102
+  s_2f2b8a177ba283::t_16de4e6b6a25d6 1-32,35-64,74-86,103-138
+  s_2f2b8a177ba283::t_0cdbd18947989f 33-34
+tests/artifacts/test_store.py
+  s_2f2b8a177ba283::t_a9756e1bbb0889 1-122
+pyproject.toml
+  s_2f2b8a177ba283::t_67345d9a25aad9 1-4,20-22,35-37,64
+src/paper_insights/__init__.py
+  s_2f2b8a177ba283::t_67345d9a25aad9 1-3
+src/paper_insights/paths.py
+  s_2f2b8a177ba283::t_7f4cc8a0f2a4f5 1-52
+src/paper_insights/config.py
+  s_2f2b8a177ba283::t_9a1c864c2572e0 109-113
+  s_2f2b8a177ba283::t_7f4cc8a0f2a4f5 1-2,9-78,127-200
+  s_2f2b8a177ba283::t_16de4e6b6a25d6 3-4,79-108,114-126
+  s_2f2b8a177ba283::t_0cdbd18947989f 5-8
+tests/config/test_paths.py
+  s_2f2b8a177ba283::t_86eb0336704e7b 1-37
+uv.lock
+  s_2f2b8a177ba283::t_7d8289725f8c8e 1-1303
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "3cd3f8dc0979c6517d84c8364cc7fe17576fbeb8",
+  "prompts": {},
+  "sessions": {
+    "s_2f2b8a177ba283": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a04a7c-f938-7500-b20e-0faa6c4019c5",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Florian BRUNIAUX <florian@bruniaux.com>"
+    }
+  }
+}
