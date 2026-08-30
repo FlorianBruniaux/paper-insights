@@ -1,0 +1,32 @@
+tests/citations/test_identifier_resolution.py
+  s_2f2b8a177ba283::t_177f3053fac167 62-63,67-68,88
+tests/citations/test_bibtex.py
+  s_2f2b8a177ba283::t_177f3053fac167 4,13-14,36-66
+tests/citations/test_csl_json.py
+  s_2f2b8a177ba283::t_51d1f0cf5ada46 19,22-26,42-43,62-66
+src/paper_insights/application/research/citations.py
+  s_2f2b8a177ba283::t_362d7dc8cee698 3,6,133-138,141-145,218,221-250,252-256
+  s_2f2b8a177ba283::t_3e33acfe63535d 82
+  s_2f2b8a177ba283::t_75eaf38efc70e6 10,214-215
+  s_2f2b8a177ba283::t_d2eaa1bf2a0a16 173
+  s_2f2b8a177ba283::t_bffee0af957c4f 251
+  s_2f2b8a177ba283::t_2479efd1f46ca9 216-217,219,265-266
+tests/citations/test_markdown.py
+  s_2f2b8a177ba283::t_e59757a2932a19 4,12,15,36,39,41-76
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "8f82a1013ebcbfb2f21fe0a65dbb7796e5cbce9a",
+  "prompts": {},
+  "sessions": {
+    "s_2f2b8a177ba283": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a04a7c-f938-7500-b20e-0faa6c4019c5",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Florian BRUNIAUX <florian@bruniaux.com>"
+    }
+  }
+}

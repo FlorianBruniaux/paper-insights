@@ -1,0 +1,56 @@
+tests/citations/test_markdown.py
+  s_2f2b8a177ba283::t_16347178971876 19-39
+  s_2f2b8a177ba283::t_7d7575ff1060be 1-2
+  s_2f2b8a177ba283::t_da2a835242af65 3-7,9-18
+  s_2f2b8a177ba283::t_127b2c179115dd 8
+tests/collections/test_service.py
+  s_2f2b8a177ba283::t_62cdf063014d6d 11
+  s_2f2b8a177ba283::t_23824d5d0e992c 1-10,12-96
+src/paper_insights/application/research/__init__.py
+  s_2f2b8a177ba283::t_d8ab1b403df045 1
+tests/citations/test_bibtex.py
+  s_2f2b8a177ba283::t_fe19849b627f63 24-34
+  s_2f2b8a177ba283::t_127b2c179115dd 9
+  s_2f2b8a177ba283::t_53172291e72201 3-8,10-23
+  s_2f2b8a177ba283::t_7d7575ff1060be 1-2
+src/paper_insights/application/research/citations.py
+  s_2f2b8a177ba283::t_62cdf063014d6d 79-81
+  s_2f2b8a177ba283::t_96e61ab541d113 78,84-86,94-100
+  s_2f2b8a177ba283::t_6b7e02ed202471 114-120,122-135,141-142,148-149
+  s_2f2b8a177ba283::t_ac4a5b41410079 3,68-69,150-155,157,159-164,174-180,184-188,194-198
+  s_2f2b8a177ba283::t_8d84422e2a0de0 156,165-173,181-183,189-193,199-200
+  s_2f2b8a177ba283::t_4a04126c0a33b8 6-7,12,15,30-36,42-59
+  s_2f2b8a177ba283::t_d9fa018c240fde 1-2,4-5,8-11,13-14,16-29,60-63,71-77,87-93,101-111,202,204-205,214-222,231-259
+  s_2f2b8a177ba283::t_ef14190b6a4748 64-67,70,112-113,136-140,143-147,201,203,206-213
+  s_2f2b8a177ba283::t_480ff32885c2b0 82-83,121,158
+  s_2f2b8a177ba283::t_04e1c110636965 37-41,223-230
+tests/citations/test_identifier_resolution.py
+  s_2f2b8a177ba283::t_52c21ea9374194 10,154-173
+  s_2f2b8a177ba283::t_127b2c179115dd 3,5,15-35,37-44,46-90,92,136
+  s_2f2b8a177ba283::t_60d6a70efebb5c 1-2,4,6-9,11-14,36,45,91,93-135,137-153
+tests/citations/test_csl_json.py
+  s_2f2b8a177ba283::t_28a37738ba112f 1-2,5,7-10,12-24
+  s_2f2b8a177ba283::t_127b2c179115dd 11
+  s_2f2b8a177ba283::t_46019c0a2f4a93 25-43
+  s_2f2b8a177ba283::t_fc479c2f69754f 6,44-61
+  s_2f2b8a177ba283::t_7d7575ff1060be 3-4
+src/paper_insights/application/research/collections.py
+  s_2f2b8a177ba283::t_d8ab1b403df045 1-22,24-30,32-44,46-52,54-56
+  s_2f2b8a177ba283::t_7a58d1415ff4d9 23,31,45,53,57-58
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "0a36d56c94e64627c274e1e6038efc357c1c64c3",
+  "prompts": {},
+  "sessions": {
+    "s_2f2b8a177ba283": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a04a7c-f938-7500-b20e-0faa6c4019c5",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}
