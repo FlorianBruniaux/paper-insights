@@ -19,6 +19,10 @@ Toutes les modifications notables du projet sont consignées ici.
 - Contrats fermés pour collections, trois formats de citation, six outils MCP, enveloppes JSON et codes de sortie CLI.
 - Contrat complet des ports synchrones, preuves d'identifiants séparées et artefacts bibliographiques versionnés.
 - Types de domaine immuables, ports synchrones et tests d'architecture de Gate 0.
+- Catalogue SQLite révisionné avec migration Alembic, clés étrangères composites, historique de provenance et snapshots de lecture strictement read-only.
+- Adaptateur arXiv borné avec validation des redirections, pagination déterministe, déduplication et normalisation versionnée testées sur fixtures locales.
+- Socle Python installable, stockage de blobs atomique et diagnostics `doctor` read-only qui distinguent corruption prouvée et état `UNKNOWN`.
+- Workflow CI séparant contrôles statiques, tests unitaires sans réseau et gate de frontière MCP avant l'implémentation du runtime MCP.
 
 ### Changed
 
@@ -41,3 +45,6 @@ Toutes les modifications notables du projet sont consignées ici.
 - Chaque observation de version conserve son record sélectionné d'origine, ce qui rend la reconstruction de page déterministe même après replay d'une capture.
 - `record_item` devient l'unique mutation atomique du corpus et de l'item, et son résultat restitue les identifiants créés sans perdre le `run_id` de provenance.
 - Les identifiants provider et additionnels déclarent désormais explicitement leur portée papier ou version, sans convention silencieuse côté catalogue.
+- Les observations versionnées portent aussi `origin_source_id`, ce qui rend impossible une provenance croisée entre version, snapshot et run.
+- Les diagnostics revalident les preuves catalogue et artefact après chaque phase afin de refuser les conclusions devenues obsolètes pendant une course concurrente.
+- Les enums textuels publics utilisent `StrEnum`, ce qui rend `str(member)` identique à la valeur canonique sérialisée tout en conservant les mêmes noms et valeurs.

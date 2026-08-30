@@ -2,11 +2,10 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 import subprocess
 import sys
 import unittest
-
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 HOOK = ROOT / ".claude" / "hooks" / "project-guard.py"
@@ -41,9 +40,7 @@ class ProjectGuardTests(unittest.TestCase):
         self.assertIn("write outside project", result.stderr)
 
     def test_blocks_sensitive_file(self) -> None:
-        result = run_hook(
-            {"tool_name": "Edit", "tool_input": {"file_path": str(ROOT / ".env")}}
-        )
+        result = run_hook({"tool_name": "Edit", "tool_input": {"file_path": str(ROOT / ".env")}})
         self.assertEqual(result.returncode, 2)
         self.assertIn("sensitive file write", result.stderr)
 
@@ -65,9 +62,7 @@ class ProjectGuardTests(unittest.TestCase):
         self.assertIn("broad staging", result.stderr)
 
     def test_allows_explicit_dot_relative_path(self) -> None:
-        result = run_hook(
-            {"tool_name": "Bash", "tool_input": {"command": "git add ./README.md"}}
-        )
+        result = run_hook({"tool_name": "Bash", "tool_input": {"command": "git add ./README.md"}})
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_blocks_force_push_when_branch_precedes_flag(self) -> None:
@@ -79,7 +74,10 @@ class ProjectGuardTests(unittest.TestCase):
 
     def test_allows_targeted_test_command(self) -> None:
         result = run_hook(
-            {"tool_name": "Bash", "tool_input": {"command": "uv run pytest tests/test_config.py -v"}}
+            {
+                "tool_name": "Bash",
+                "tool_input": {"command": "uv run pytest tests/test_config.py -v"},
+            }
         )
         self.assertEqual(result.returncode, 0, result.stderr)
 

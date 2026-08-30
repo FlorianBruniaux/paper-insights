@@ -151,6 +151,7 @@ Un index unique partiel garantit une seule version courante par `(paper_id, sour
 | `paper_version_id` | FK vers `paper_versions` |
 | `normalized_sha256` | empreinte du JSON bibliographique canonique |
 | `observed_at` | UTC |
+| `origin_source_id` | FK vers la source commune à la version, au snapshot et à la run d'origine |
 | `origin_run_id` | composante de la provenance d'origine |
 | `origin_source_snapshot_id` | composante de la provenance d'origine |
 | `origin_record_ordinal` | composante de la provenance d'origine |
@@ -164,7 +165,7 @@ Un index unique partiel garantit une seule version courante par `(paper_id, sour
 | `submitted_at` | nullable, UTC |
 | `announced_at` | nullable, UTC |
 
-Contrainte unique: `(paper_version_id, normalized_sha256)`. La FK composite `(origin_run_id, origin_source_snapshot_id, origin_record_ordinal) -> ingestion_run_selected_records(run_id, source_snapshot_id, record_ordinal)` conserve le record sélectionné qui a créé l'observation. Son `page_ordinal` se dérive uniquement de `ingestion_run_snapshots` pour cette run et ce snapshot, jamais d'un item de replay choisi arbitrairement. Une correction de métadonnées sur une version connue crée une nouvelle observation et conserve l'ancienne. Une observation déjà connue est réutilisée et le nouveau `snapshot_record` y est relié sans modifier sa provenance d'origine.
+Contrainte unique: `(paper_version_id, normalized_sha256)`. `origin_source_id` ferme par clés étrangères composites l'appartenance de la version, du snapshot et de la run à la même source. La FK composite `(origin_run_id, origin_source_snapshot_id, origin_record_ordinal) -> ingestion_run_selected_records(run_id, source_snapshot_id, record_ordinal)` conserve le record sélectionné qui a créé l'observation. Son `page_ordinal` se dérive uniquement de `ingestion_run_snapshots` pour cette run et ce snapshot, jamais d'un item de replay choisi arbitrairement. Une correction de métadonnées sur une version connue crée une nouvelle observation et conserve l'ancienne. Une observation déjà connue est réutilisée et le nouveau `snapshot_record` y est relié sans modifier sa provenance d'origine.
 
 L'observation courante d'une version est la dernière selon `(observed_at, id)`. La citation d'une version explicite peut aussi sélectionner une observation explicite lorsque la provenance doit être reproduite.
 

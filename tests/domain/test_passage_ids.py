@@ -8,7 +8,6 @@ import pytest
 from paper_insights.domain.identifiers import PaperVersionId, Sha256
 from paper_insights.domain.retrieval import PassageIdentity, passage_id
 
-
 VERSION_ID = PaperVersionId(UUID("01890f3e-3b12-7cc0-98d6-4f6f94748f5a"))
 
 

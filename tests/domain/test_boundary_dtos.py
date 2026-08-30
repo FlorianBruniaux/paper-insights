@@ -406,11 +406,7 @@ def test_analysis_key_and_request_are_closed_and_ordered() -> None:
         ),
         lambda: IdentityObservationBatch(
             SourceId("orcid"),
-            (
-                IdentityObservation(
-                    SourceId("openalex"), "A1", "Ada", Sha256("a" * 64), NOW
-                ),
-            ),
+            (IdentityObservation(SourceId("openalex"), "A1", "Ada", Sha256("a" * 64), NOW),),
         ),
         lambda: IdentityState((AuthorId(ID),), -1),
         lambda: CorpusCapabilities((), False, False),
@@ -450,9 +446,7 @@ def test_citation_result_requires_exact_schema_and_provenance() -> None:
         warnings=(),
     )
     assert CitationResult(**kwargs).source_item_id == "2608.01234"
-    rendered = CitationResult(
-        **{**kwargs, "warnings": (CitationWarning.LITERAL_AUTHOR,)}
-    )
+    rendered = CitationResult(**{**kwargs, "warnings": (CitationWarning.LITERAL_AUTHOR,)})
     assert json.dumps(rendered.warnings) == '["literal-author"]'
     with pytest.raises(ValueError):
         CitationResult(**{**kwargs, "schema_version": "future-v2"})

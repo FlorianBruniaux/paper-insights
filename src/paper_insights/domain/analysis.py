@@ -4,7 +4,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from enum import Enum
+from enum import StrEnum
 from urllib.parse import urlsplit
 
 from paper_insights.domain.corpus import ArtifactRef
@@ -12,7 +12,7 @@ from paper_insights.domain.identifiers import AnalysisId, PaperVersionId, Passag
 from paper_insights.domain.validation import require_tuples
 
 
-class AnalysisState(str, Enum):
+class AnalysisState(StrEnum):
     RUNNING = "running"
     COMPLETE = "complete"
     INVALID = "invalid"

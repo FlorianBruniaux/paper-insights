@@ -41,9 +41,7 @@ def test_parser_handles_default_namespaces_and_preserves_ordered_metadata() -> N
 
 
 def test_parser_handles_prefixed_atom_namespace_and_absent_doi() -> None:
-    parsed = parse_arxiv_feed(
-        (FIXTURES / "page-2-overlap.xml").read_bytes(), page_ordinal=1
-    )
+    parsed = parse_arxiv_feed((FIXTURES / "page-2-overlap.xml").read_bytes(), page_ordinal=1)
 
     observation = parsed.records[1].observation
     assert observation is not None
@@ -60,8 +58,7 @@ def test_parser_keeps_v1_and_v2_as_distinct_versions() -> None:
     assert first.records[0].observation is not None
     assert revised.records[0].observation is not None
     assert (
-        first.records[0].observation.source_item_id
-        == revised.records[0].observation.source_item_id
+        first.records[0].observation.source_item_id == revised.records[0].observation.source_item_id
     )
     assert first.records[0].observation.source_version_key == "2608.01234v1"
     assert revised.records[0].observation.source_version_key == "2608.01234v2"
@@ -102,9 +99,7 @@ def test_utf16_doctype_and_entities_are_rejected_by_the_xml_parser() -> None:
 
 
 def test_invalid_doi_is_not_exposed_as_a_canonical_identifier() -> None:
-    payload = (FIXTURES / "page-1.xml").read_bytes().replace(
-        b"10.1234/EXAMPLE.1", b"not a doi"
-    )
+    payload = (FIXTURES / "page-1.xml").read_bytes().replace(b"10.1234/EXAMPLE.1", b"not a doi")
 
     parsed = parse_arxiv_feed(payload, page_ordinal=0)
 

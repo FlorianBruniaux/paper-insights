@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from enum import Enum
+from enum import StrEnum
 
 from paper_insights.domain.identifiers import AuthorId, IdentityEventId, Sha256, SourceId
 from paper_insights.domain.validation import require_tuples
 
 
-class IdentityDecisionKind(str, Enum):
+class IdentityDecisionKind(StrEnum):
     MERGE = "merge"
     SPLIT = "split"
     CONFIRM_LINKEDIN = "confirm_linkedin"

@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pytest
 
-
 INFRASTRUCTURE_IMPORTS = (
     "sqlalchemy",
     "alembic",
@@ -97,27 +96,19 @@ def architecture_violations(root: Path) -> list[str]:
                         name
                         for name in (
                             resolved,
-                            *(
-                                f"{resolved}.{alias.name}"
-                                for alias in node.names
-                                if resolved
-                            ),
+                            *(f"{resolved}.{alias.name}" for alias in node.names if resolved),
                         )
                         if name
                     )
                 elif resolved:
                     imported = tuple(f"{resolved}.{alias.name}" for alias in node.names)
             for name in imported:
-                if (
-                    relative == Path("application/analysis/schemas.py")
-                    and (name == "pydantic" or name.startswith("pydantic."))
+                if relative == Path("application/analysis/schemas.py") and (
+                    name == "pydantic" or name.startswith("pydantic.")
                 ):
                     continue
                 forbidden = FORBIDDEN.get(layer, ())
-                if any(
-                    name == prefix or name.startswith(f"{prefix}.")
-                    for prefix in forbidden
-                ):
+                if any(name == prefix or name.startswith(f"{prefix}.") for prefix in forbidden):
                     violations.append(f"{relative}: forbidden import {name}")
         for node in _import_time_calls(tree.body):
             called = node.func

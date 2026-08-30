@@ -5,8 +5,9 @@ import json
 import unicodedata
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
+from typing import Protocol
 
 from paper_insights.domain.identifiers import (
     PaperId,
@@ -19,6 +20,11 @@ from paper_insights.domain.identifiers import (
 from paper_insights.domain.validation import require_tuples
 
 
+class _Ranked(Protocol):
+    @property
+    def rank(self) -> int: ...
+
+
 @dataclass(frozen=True, slots=True, order=True)
 class CatalogRevision:
     value: int
@@ -28,7 +34,7 @@ class CatalogRevision:
             raise ValueError("catalog revision cannot be negative")
 
 
-class CoverageStatus(str, Enum):
+class CoverageStatus(StrEnum):
     COMPLETE = "complete"
     PARTIAL = "partial"
     UNAVAILABLE = "unavailable"
@@ -163,11 +169,11 @@ class SearchFilters:
     collection: str | None = None
 
     def __post_init__(self) -> None:
-        for value in (self.category, self.author, self.language, self.collection):
-            if value is not None and not value.strip():
+        for text_value in (self.category, self.author, self.language, self.collection):
+            if text_value is not None and not text_value.strip():
                 raise ValueError("search filter values cannot be blank")
-        for value in (self.date_from, self.date_to):
-            if value is not None and value.utcoffset() != timedelta(0):
+        for date_value in (self.date_from, self.date_to):
+            if date_value is not None and date_value.utcoffset() != timedelta(0):
                 raise ValueError("search filter dates must use UTC")
         if self.date_from is not None and self.date_to is not None:
             if self.date_from > self.date_to:
@@ -239,7 +245,7 @@ class PassageSearchHit:
 
 
 def _validate_result(
-    hits: tuple[object, ...],
+    hits: tuple[_Ranked, ...],
     returned: int,
     available: int | None,
     truncated: bool,
@@ -255,7 +261,7 @@ def _validate_result(
         raise ValueError("unreturned available hits require truncation")
     if returned > applied_limit:
         raise ValueError("returned hits exceed the applied limit")
-    ranks = tuple(getattr(hit, "rank") for hit in hits)
+    ranks = tuple(hit.rank for hit in hits)
     if ranks != tuple(range(1, returned + 1)):
         raise ValueError("result ranks must be positive, unique, and ordered")
 

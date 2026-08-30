@@ -30,9 +30,9 @@ def test_raw_record_hash_tracks_the_exact_entry_bytes() -> None:
     parsed = parse_arxiv_feed(payload, page_ordinal=0)
 
     first_raw = payload[payload.index(b"  <entry>") + 2 : payload.index(b"  </entry>") + 10]
-    assert parsed.records[0].locator.raw_record_sha256.value == hashlib.sha256(
-        first_raw
-    ).hexdigest()
+    assert (
+        parsed.records[0].locator.raw_record_sha256.value == hashlib.sha256(first_raw).hexdigest()
+    )
 
 
 def test_identifier_scope_changes_canonical_payload_and_digest() -> None:

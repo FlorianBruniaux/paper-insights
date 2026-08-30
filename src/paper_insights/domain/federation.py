@@ -3,13 +3,12 @@ from __future__ import annotations
 import hashlib
 import re
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 
 from paper_insights.domain.identifiers import Sha256
 from paper_insights.domain.retrieval import CoverageStatus
 from paper_insights.domain.validation import require_tuples
-
 
 _CORPUS_ID = re.compile(r"^[a-z][a-z0-9-]{0,63}$")
 
@@ -23,7 +22,7 @@ class CorpusId:
             raise ValueError("corpus ID must be canonical")
 
 
-class SourceType(str, Enum):
+class SourceType(StrEnum):
     PAPER = "paper"
     VIDEO = "video"
     REPOSITORY = "repository"

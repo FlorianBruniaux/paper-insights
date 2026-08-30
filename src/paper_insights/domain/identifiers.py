@@ -4,7 +4,6 @@ import re
 from dataclasses import dataclass
 from uuid import UUID
 
-
 _SOURCE_ID = re.compile(r"^[a-z][a-z0-9-]{0,63}$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _ARXIV_ID = re.compile(r"^(?:[a-z-]+(?:\.[A-Z]{2})?/\d{7}|\d{4}\.\d{4,5})$")

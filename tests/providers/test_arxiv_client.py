@@ -106,9 +106,7 @@ def test_retryable_statuses_are_retried_and_retry_after_is_capped(first_status: 
         nonlocal calls
         calls += 1
         if calls == 1:
-            return httpx.Response(
-                first_status, headers={"Retry-After": "50"}, request=request
-            )
+            return httpx.Response(first_status, headers={"Retry-After": "50"}, request=request)
         return httpx.Response(
             200, content=(FIXTURES / "revision-v2.xml").read_bytes(), request=request
         )
@@ -192,9 +190,7 @@ def test_permanent_4xx_is_never_retried(status_code: int) -> None:
     ("status_code", "expected_code"),
     ((429, ErrorCode.SOURCE_RATE_LIMITED), (503, ErrorCode.SOURCE_INVALID_PAYLOAD)),
 )
-def test_retryable_status_attempts_are_bounded(
-    status_code: int, expected_code: ErrorCode
-) -> None:
+def test_retryable_status_attempts_are_bounded(status_code: int, expected_code: ErrorCode) -> None:
     calls = 0
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -240,13 +236,15 @@ def test_duplicate_pages_cannot_exceed_the_configured_page_bound() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         nonlocal calls
         calls += 1
-        payload = (FIXTURES / "page-1.xml").read_bytes().replace(
-            b"<opensearch:totalResults>3</opensearch:totalResults>",
-            b"<opensearch:totalResults>100</opensearch:totalResults>",
+        payload = (
+            (FIXTURES / "page-1.xml")
+            .read_bytes()
+            .replace(
+                b"<opensearch:totalResults>3</opensearch:totalResults>",
+                b"<opensearch:totalResults>100</opensearch:totalResults>",
+            )
         )
-        return httpx.Response(
-            200, content=payload, request=request
-        )
+        return httpx.Response(200, content=payload, request=request)
 
     client = make_client(
         httpx.MockTransport(handler),

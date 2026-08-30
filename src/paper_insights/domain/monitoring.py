@@ -8,7 +8,6 @@ from paper_insights.domain.acquisition import DiscoveryQuery
 from paper_insights.domain.corpus import IngestionSummary
 from paper_insights.domain.identifiers import RunId, SourceId, WatchlistId
 
-
 _SLUG = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
 

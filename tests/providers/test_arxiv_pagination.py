@@ -108,9 +108,9 @@ def test_request_fingerprint_keeps_initial_query_across_a_redirect() -> None:
             new_capture_id=lambda: UUID("01890f3e-3b12-7cc0-98d6-4f6f94748f5a"),
             sleep=lambda _delay: None,
         )
-        return client.discover(DiscoveryQuery(text=text, limit=1)).pages[
-            0
-        ].request_fingerprint.value
+        return (
+            client.discover(DiscoveryQuery(text=text, limit=1)).pages[0].request_fingerprint.value
+        )
 
     assert discover("alpha") != discover("beta")
 
@@ -122,9 +122,7 @@ def test_request_fingerprint_covers_every_redirect_hop() -> None:
                 target = "/api/intermediate" if with_intermediate_hop else "/api/final"
                 return httpx.Response(302, headers={"Location": target}, request=request)
             if request.url.path == "/api/intermediate":
-                return httpx.Response(
-                    302, headers={"Location": "/api/final"}, request=request
-                )
+                return httpx.Response(302, headers={"Location": "/api/final"}, request=request)
             return httpx.Response(
                 200, content=(FIXTURES / "revision-v2.xml").read_bytes(), request=request
             )
@@ -136,8 +134,8 @@ def test_request_fingerprint_covers_every_redirect_hop() -> None:
             new_capture_id=lambda: UUID("01890f3e-3b12-7cc0-98d6-4f6f94748f5a"),
             sleep=lambda _delay: None,
         )
-        return client.discover(DiscoveryQuery(text="same", limit=1)).pages[
-            0
-        ].request_fingerprint.value
+        return (
+            client.discover(DiscoveryQuery(text="same", limit=1)).pages[0].request_fingerprint.value
+        )
 
     assert discover(with_intermediate_hop=False) != discover(with_intermediate_hop=True)

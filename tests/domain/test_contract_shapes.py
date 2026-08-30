@@ -40,9 +40,7 @@ def make_result(**changes: object) -> PaperSearchResult:
     hit = PaperSearchHit(
         paper_id=PaperId(UUID("01890f3e-3b12-7cc0-98d6-4f6f94748f5a")),
         paper_version_id=PaperVersionId(UUID("01890f3e-3b12-7cc0-98d6-4f6f94748f5a")),
-        version_observation_id=VersionObservationId(
-            UUID("01890f3e-3b12-7cc0-98d6-4f6f94748f5a")
-        ),
+        version_observation_id=VersionObservationId(UUID("01890f3e-3b12-7cc0-98d6-4f6f94748f5a")),
         title="Paper",
         rank=1,
         bm25_score=-1.0,
@@ -149,9 +147,7 @@ def test_search_filters_and_passage_views_reject_incoherent_values() -> None:
         SearchFilters(category="   ")
 
     identity = PassageIdentity(
-        paper_version_id=PaperVersionId(
-            UUID("01890f3e-3b12-7cc0-98d6-4f6f94748f5a")
-        ),
+        paper_version_id=PaperVersionId(UUID("01890f3e-3b12-7cc0-98d6-4f6f94748f5a")),
         artifact_sha256=Sha256("b" * 64),
         chunk_schema_version="chunk-v1",
         section=None,
@@ -200,8 +196,7 @@ def test_every_public_domain_dataclass_is_frozen_slotted_and_has_no_mutable_coll
             assert hasattr(candidate, "__slots__"), name
             hints = get_type_hints(candidate)
             assert not any(
-                str(hint).startswith(("list[", "dict[", "set["))
-                for hint in hints.values()
+                str(hint).startswith(("list[", "dict[", "set[")) for hint in hints.values()
             ), name
 
 
@@ -310,8 +305,7 @@ def test_all_announced_ports_are_protocols_sync_annotated_and_framework_free() -
         "CatalogUnitOfWork.rollback": "(self) -> 'None'",
         "CatalogUnitOfWorkFactory.begin": "(self) -> 'CatalogUnitOfWork'",
         "CitationRenderer.render": (
-            "(self, citation: 'CitationInput', format: 'CitationFormat') "
-            "-> 'CitationResult'"
+            "(self, citation: 'CitationInput', format: 'CitationFormat') -> 'CitationResult'"
         ),
         "Clock.now": "(self) -> 'datetime'",
         "CollectionRepository.add": "(self, command: 'AddCollectionPaper') -> 'CollectionView'",
@@ -333,8 +327,7 @@ def test_all_announced_ports_are_protocols_sync_annotated_and_framework_free() -
         "IdentityUnitOfWork.apply": "(self, decision: 'IdentityDecision') -> 'IdentityState'",
         "IdentityUnitOfWork.commit": "(self) -> 'None'",
         "IdentityUnitOfWork.record_observations": (
-            "(self, batch: 'IdentityObservationBatch') "
-            "-> 'tuple[IdentityObservationRef, ...]'"
+            "(self, batch: 'IdentityObservationBatch') -> 'tuple[IdentityObservationRef, ...]'"
         ),
         "IdentityUnitOfWork.reverse": (
             "(self, command: 'ReverseIdentityDecision') -> 'IdentityState'"
@@ -360,8 +353,7 @@ def test_all_announced_ports_are_protocols_sync_annotated_and_framework_free() -
         ),
         "SearchIndexBuilder.discard": "(self, candidate: 'IndexCandidate') -> 'None'",
         "SearchIndexBuilder.publish": (
-            "(self, candidate: 'IndexCandidate', lease: 'CatalogRevisionLease') "
-            "-> 'PublishedIndex'"
+            "(self, candidate: 'IndexCandidate', lease: 'CatalogRevisionLease') -> 'PublishedIndex'"
         ),
         "SearchIndexReader.get_passage": "(self, passage_id: 'PassageId') -> 'PassageView | None'",
         "SearchIndexReader.search_papers": (
@@ -407,9 +399,7 @@ def test_all_announced_ports_are_protocols_sync_annotated_and_framework_free() -
 
     for name, protocol in exported.items():
         assert getattr(protocol, "_is_protocol", False), name
-        attributes = {
-            key: value.__name__ for key, value in get_type_hints(protocol).items()
-        }
+        attributes = {key: value.__name__ for key, value in get_type_hints(protocol).items()}
         assert attributes == expected_attributes.get(name, {})
         methods = {
             method_name: method

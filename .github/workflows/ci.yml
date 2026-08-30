@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  static:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v6
+      - name: Verify dependency lock
+        run: uv lock --check
+      - name: Install locked dependencies
+        run: uv sync --all-extras --dev --locked
+      - name: Validate repository contracts
+        run: python3 scripts/validate_project.py
+      - name: Lint
+        run: uv run ruff check .
+      - name: Check formatting
+        run: uv run ruff format --check .
+      - name: Type-check
+        run: uv run mypy src
+
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v6
+      - name: Install locked dependencies
+        run: uv sync --all-extras --dev --locked
+      - name: Run tests without network access
+        run: uv run pytest --disable-socket -q
+      - name: Preserve scaffold unittest discovery
+        run: python3 -m unittest discover -s tests -p 'test_*.py'
+
+  integration-mcp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v6
+      - name: Install locked dependencies
+        run: uv sync --all-extras --dev --locked
+      - name: Verify the MCP architecture boundary before WP-30
+        run: uv run pytest --disable-socket tests/architecture -q

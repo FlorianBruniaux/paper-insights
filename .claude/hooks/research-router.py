@@ -7,7 +7,6 @@ import json
 import re
 import sys
 
-
 PAPER_CONTEXT = re.compile(
     r"\b(arxiv|paper|papers|papier|papiers|publication|publications|preprint|preprints)\b",
     re.IGNORECASE,
@@ -29,12 +28,14 @@ def context_for(prompt: str) -> str | None:
         return (
             "[paper-insights routing] This is an ingestion or monitoring request. "
             "Use the paper-ingest skill. Preview first, keep network access and corpus mutation "
-            "in the main session, and require confirmation for queries, watchlists or multiple papers."
+            "in the main session, and require confirmation for queries, watchlists or "
+            "multiple papers."
         )
     if RESEARCH_INTENT.search(prompt):
         return (
             "[paper-insights routing] This is a read-only corpus research request. "
-            "Use the paper-research skill and paper-researcher agent. Return source-backed metadata "
+            "Use the paper-research skill and paper-researcher agent. Return source-backed "
+            "metadata "
             "and passages, and state local corpus coverage limits."
         )
     return None

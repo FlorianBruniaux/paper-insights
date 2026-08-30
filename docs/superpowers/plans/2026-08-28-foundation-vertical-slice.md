@@ -119,7 +119,9 @@ git commit -m "feat: add strict configuration foundation"
 - [ ] **Step 1: Write failing migration and idempotence tests**
 
 ```python
-def test_same_source_version_is_idempotent(repository: CatalogRepository, record: NormalizedPaperRecord) -> None:
+def test_same_source_version_is_idempotent(
+    repository: CatalogRepository, record: NormalizedPaperRecord
+) -> None:
     first = repository.upsert_record(record, run_id="run-1")
     second = repository.upsert_record(record, run_id="run-2")
     assert first.status == "created"

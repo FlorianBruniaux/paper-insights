@@ -4,7 +4,7 @@ import json
 import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from enum import Enum, StrEnum
+from enum import StrEnum
 from pathlib import Path
 from uuid import UUID
 
@@ -30,14 +30,14 @@ from paper_insights.domain.retrieval import CoverageStatus
 from paper_insights.domain.validation import require_tuples
 
 
-class IngestionStatus(str, Enum):
+class IngestionStatus(StrEnum):
     RUNNING = "running"
     SUCCEEDED = "succeeded"
     PARTIAL = "partial"
     FAILED = "failed"
 
 
-class IngestionOutcome(str, Enum):
+class IngestionOutcome(StrEnum):
     NEW_VERSION = "new_version"
     METADATA_UPDATE = "metadata_update"
     UNCHANGED = "unchanged"
@@ -62,7 +62,7 @@ _INGESTION_FAILURE_CODES = {
 }
 
 
-class ArtifactKind(str, Enum):
+class ArtifactKind(StrEnum):
     METADATA = "metadata"
     PDF = "pdf"
     TEXT = "text"
@@ -98,10 +98,7 @@ class RunCounters:
         if any(value < 0 for value in values):
             raise ValueError("run counters cannot be negative")
         outcomes = (
-            self.new_versions
-            + self.metadata_updates
-            + self.unchanged_records
-            + self.failed_records
+            self.new_versions + self.metadata_updates + self.unchanged_records + self.failed_records
         )
         if self.selected_records != outcomes:
             raise ValueError("selected records must equal the sum of item outcomes")
@@ -262,9 +259,7 @@ class IngestionRunRef:
         ordinals = tuple(snapshot.page_ordinal for snapshot in self.snapshots)
         if ordinals != tuple(range(len(self.snapshots))):
             raise ValueError("attached snapshots must be contiguous and ordered")
-        if len({snapshot.snapshot_id for snapshot in self.snapshots}) != len(
-            self.snapshots
-        ):
+        if len({snapshot.snapshot_id for snapshot in self.snapshots}) != len(self.snapshots):
             raise ValueError("attached snapshot IDs must be unique")
 
     def snapshot_id_for(self, page_ordinal: int) -> SnapshotId:
@@ -401,9 +396,7 @@ class InterruptedRunRepairResult:
             raise ValueError("catalog revision cannot be negative")
         if not isinstance(self.outcome, InterruptedRunRepairOutcome):
             raise ValueError("interrupted run repair outcome is invalid")
-        if (self.outcome is InterruptedRunRepairOutcome.REPAIRED) != (
-            self.summary is not None
-        ):
+        if (self.outcome is InterruptedRunRepairOutcome.REPAIRED) != (self.summary is not None):
             raise ValueError("repair summary must exist exactly when a run was repaired")
         if self.summary is not None and self.summary.run_id != self.run_id:
             raise ValueError("repair summary belongs to another run")
@@ -545,13 +538,13 @@ class BlobInspection:
             raise ValueError("valid blob must exist")
 
 
-class CitationFormat(str, Enum):
+class CitationFormat(StrEnum):
     BIBTEX = "bibtex"
     MARKDOWN = "markdown"
     CSL_JSON = "csl-json"
 
 
-class CitationWarning(str, Enum):
+class CitationWarning(StrEnum):
     LITERAL_AUTHOR = "literal-author"
     MISSING_REQUIRED_FIELD = "missing-required-field"
     PARTIAL_DATE = "partial-date"

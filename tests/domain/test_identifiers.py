@@ -14,7 +14,6 @@ from paper_insights.domain.identifiers import (
     VersionSelector,
 )
 
-
 UUID7 = UUID("01890f3e-3b12-7cc0-98d6-4f6f94748f5a")
 
 

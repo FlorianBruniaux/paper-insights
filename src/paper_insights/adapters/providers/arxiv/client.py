@@ -192,9 +192,7 @@ class ArxivClient:
             has_more = bool(parsed.records) and (
                 parsed.total_results is None or next_start < parsed.total_results
             )
-            next_cursor = (
-                str(next_start) if has_more and len(observations) < query.limit else None
-            )
+            next_cursor = str(next_start) if has_more and len(observations) < query.limit else None
             request_fingerprint = Sha256(
                 hashlib.sha256(
                     json.dumps(
