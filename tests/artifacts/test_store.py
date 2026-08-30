@@ -442,3 +442,37 @@ def test_find_orphans_is_unknown_when_child_binding_changes_after_recursion(
         store.find_orphans(frozenset())
 
     assert swapped_after_recursion
+
+
+def test_find_orphans_is_unknown_when_file_binding_changes_after_fstat(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = FilesystemBlobStore(CorpusPaths.from_data_root(tmp_path / "corpus"))
+    orphan = store.put(BlobWrite(content=b"orphan", media_type="text/plain"))
+    target = store.paths.confined(orphan.relative_path)
+    target_identity = target.stat(follow_symlinks=False)
+    moved = tmp_path / "moved-blob"
+    outside = tmp_path / "outside-blob"
+    outside.write_bytes(b"outside")
+    real_fstat = os.fstat
+    swapped_after_fstat = False
+
+    def swap_file_after_fstat(descriptor: int) -> os.stat_result:
+        nonlocal swapped_after_fstat
+        metadata = real_fstat(descriptor)
+        if not swapped_after_fstat and (metadata.st_dev, metadata.st_ino) == (
+            target_identity.st_dev,
+            target_identity.st_ino,
+        ):
+            target.rename(moved)
+            target.symlink_to(outside)
+            swapped_after_fstat = True
+        return metadata
+
+    monkeypatch.setattr(os, "fstat", swap_file_after_fstat)
+
+    with pytest.raises(DiagnosticUnavailableError):
+        store.find_orphans(frozenset())
+
+    assert swapped_after_fstat
+    assert outside.read_bytes() == b"outside"

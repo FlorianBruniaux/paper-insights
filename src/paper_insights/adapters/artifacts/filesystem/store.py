@@ -189,6 +189,16 @@ class FilesystemBlobStore:
                     raise BlobStoreError("unsafe blob path")
                 if (scanned.st_dev, scanned.st_ino) != (opened.st_dev, opened.st_ino):
                     raise DiagnosticUnavailableError("blob file binding changed")
+                current = os.stat(
+                    entry.name,
+                    dir_fd=descriptor,
+                    follow_symlinks=False,
+                )
+                if not stat.S_ISREG(current.st_mode) or (
+                    opened.st_dev,
+                    opened.st_ino,
+                ) != (current.st_dev, current.st_ino):
+                    raise DiagnosticUnavailableError("blob file binding changed")
             finally:
                 os.close(file_descriptor)
             digest = entry.name.removesuffix(".blob")
