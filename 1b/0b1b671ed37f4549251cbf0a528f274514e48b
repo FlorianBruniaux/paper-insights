@@ -1,0 +1,80 @@
+src/paper_insights/domain/errors.py
+  s_2f2b8a177ba283::t_4869bf23be0e0e 4,8
+  s_2f2b8a177ba283::t_0b4d0ad3c3b689 32-47
+CHANGELOG.md
+  s_2f2b8a177ba283::t_4869bf23be0e0e 22-25,48-49
+  s_2f2b8a177ba283::t_35864c1808bcf8 50
+src/paper_insights/domain/identity.py
+  s_2f2b8a177ba283::t_4869bf23be0e0e 5,11
+pyproject.toml
+  s_2f2b8a177ba283::t_4869bf23be0e0e 60
+src/paper_insights/domain/retrieval.py
+  s_2f2b8a177ba283::t_4869bf23be0e0e 8,37,172-173,175-176,264
+  s_2f2b8a177ba283::t_cd261bf0d529a6 24-25
+  s_2f2b8a177ba283::t_06c0a8f402a374 10,23,26-27,248
+.github/workflows/ci.yml
+  s_2f2b8a177ba283::t_075f17a156e78e 20-21,23,42,57
+  s_2f2b8a177ba283::t_4869bf23be0e0e 1-19,22,24-41,43-56,58-59
+tests/hooks/test_project_guard.py
+  s_2f2b8a177ba283::t_e975f11422d8ea 8,43,65,77-80
+.claude/hooks/research-router.py
+  s_2f2b8a177ba283::t_e975f11422d8ea 31-32,37-38
+src/paper_insights/domain/corpus.py
+  s_2f2b8a177ba283::t_4869bf23be0e0e 7,33,40,65,101,262,399,541,547
+src/paper_insights/domain/analysis.py
+  s_2f2b8a177ba283::t_4869bf23be0e0e 7,15
+src/paper_insights/domain/federation.py
+  s_2f2b8a177ba283::t_4869bf23be0e0e 6,25
+docs/specs/DATA-MODEL.md
+  s_2f2b8a177ba283::t_4869bf23be0e0e 154,168
+.claude/hooks/project-guard.py
+  s_2f2b8a177ba283::t_110df059aff5de 10
+docs/specs/PORTS.md
+  s_2f2b8a177ba283::t_94d5b5ac5ce8b6 15,30,45,52-57,61,65,70-72,75,82,86,91-96,103,107,112-117,130,136,151,154-159,176,183,190,194,197-202,220,224,227-235,254
+docs/superpowers/plans/2026-08-28-foundation-vertical-slice.md
+  s_2f2b8a177ba283::t_5a7248ceb1cc01 122-124
+scripts/validate_project.py
+  s_2f2b8a177ba283::t_ba618ac6534561 9
+src/paper_insights/adapters/providers/arxiv/client.py
+  s_2f2b8a177ba283::t_8247668e05d035 195
+src/paper_insights/application/ports/__init__.py
+  s_2f2b8a177ba283::t_c0a1cde14f0399 57
+src/paper_insights/application/ports/catalog.py
+  s_2f2b8a177ba283::t_82eea34fe29906 100
+src/paper_insights/application/ports/search.py
+  s_2f2b8a177ba283::t_34476929ebc648 22
+src/paper_insights/domain/validation.py
+  s_2f2b8a177ba283::t_ab9c425107f4e8 3
+tests/architecture/test_import_boundaries.py
+  s_2f2b8a177ba283::t_dc81c0e986069a 99,106-107,111
+tests/domain/test_boundary_dtos.py
+  s_2f2b8a177ba283::t_19bed6d4fed359 409,449
+tests/domain/test_contract_shapes.py
+  s_2f2b8a177ba283::t_72c114f9067143 43,150,199,308,330,356,402
+tests/hooks/test_research_router.py
+  s_2f2b8a177ba283::t_da6c28d06c7350 8
+tests/providers/test_arxiv_client.py
+  s_2f2b8a177ba283::t_9e8f0e3d557fdc 109,193,239-245,247
+tests/providers/test_arxiv_normalizer.py
+  s_2f2b8a177ba283::t_3a62e6b5f8d886 33-35
+tests/providers/test_arxiv_pagination.py
+  s_2f2b8a177ba283::t_24ae56c8d9c204 111-113,125,137-139
+tests/providers/test_arxiv_parser.py
+  s_2f2b8a177ba283::t_8f72842c9748de 44,61,102
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "1b0b1b671ed37f4549251cbf0a528f274514e48b",
+  "prompts": {},
+  "sessions": {
+    "s_2f2b8a177ba283": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a04a7c-f938-7500-b20e-0faa6c4019c5",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Florian BRUNIAUX <florian@bruniaux.com>"
+    }
+  }
+}
