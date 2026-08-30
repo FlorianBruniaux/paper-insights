@@ -9,6 +9,12 @@ from uuid import UUID
 import sqlalchemy as sa
 from sqlalchemy import Connection, Engine
 
+from paper_insights.application.ports.catalog import (
+    CatalogUnitOfWork,
+    CollectionRepository,
+    CorpusRepository,
+    IngestionRepository,
+)
 from paper_insights.application.ports.clock import Clock
 from paper_insights.application.ports.ids import IdGenerator
 from paper_insights.domain.acquisition import IdentifierScope, ObservedPaperVersion
@@ -595,18 +601,20 @@ class SqliteIngestionRepository:
             self._connection.execute(
                 sa.text(
                     "INSERT INTO version_observations "
-                    "(id, paper_version_id, normalized_sha256, observed_at, origin_run_id, "
+                    "(id, paper_version_id, normalized_sha256, observed_at, origin_source_id, "
+                    "origin_run_id, "
                     "origin_source_snapshot_id, origin_record_ordinal, title, title_normalized, "
                     "abstract, comment, journal_reference, language, source_url, submitted_at, "
-                    "announced_at) VALUES (:id, :version, :sha, :observed_at, :run, :snapshot, "
-                    ":ordinal, :title, :title_normalized, :abstract, :comment, :journal, "
-                    ":language, :source_url, :submitted, :announced)"
+                    "announced_at) VALUES (:id, :version, :sha, :observed_at, :source, :run, "
+                    ":snapshot, :ordinal, :title, :title_normalized, :abstract, :comment, "
+                    ":journal, :language, :source_url, :submitted, :announced)"
                 ),
                 {
                     "id": str(observation_id),
                     "version": str(version_id),
                     "sha": str(observed.normalized_sha256),
                     "observed_at": _utc_text(now),
+                    "source": str(observed.source_id),
                     "run": str(command.run_id),
                     "snapshot": str(record.snapshot_id),
                     "ordinal": record.record_ordinal,
@@ -1307,11 +1315,11 @@ class SqliteCatalogUnitOfWork:
         self._connection: Connection | None = None
         self._visible_mutation = False
         self._finished = False
-        self.corpus: SqliteCorpusRepository
-        self.ingestion: SqliteIngestionRepository
-        self.collections: SqliteCollectionRepository
+        self.corpus: CorpusRepository
+        self.ingestion: IngestionRepository
+        self.collections: CollectionRepository
 
-    def __enter__(self) -> SqliteCatalogUnitOfWork:
+    def __enter__(self) -> CatalogUnitOfWork:
         if self._connection is not None:
             raise RuntimeError("catalog unit of work is already open")
         connection = self._engine.connect()
@@ -1395,5 +1403,5 @@ class SqliteCatalogUnitOfWorkFactory:
         self._clock = clock
         self._ids = ids
 
-    def begin(self) -> SqliteCatalogUnitOfWork:
+    def begin(self) -> CatalogUnitOfWork:
         return SqliteCatalogUnitOfWork(self._engine, self._clock, self._ids)

@@ -18,7 +18,11 @@ def _connection(database_path: Path) -> sqlite3.Connection:
     return connection
 
 
-def _seed_selected_origin(connection: sqlite3.Connection, suffix: int) -> tuple[str, str, int]:
+def _seed_selected_origin(
+    connection: sqlite3.Connection,
+    suffix: int,
+    source_id: str = "arxiv",
+) -> tuple[str, str, int]:
     blob_id = f"01890f3a-0000-7000-8000-{suffix:012d}"
     snapshot_id = f"01890f3a-0000-7000-8000-{suffix + 1:012d}"
     capture_id = f"01890f3a-0000-7000-8000-{suffix + 2:012d}"
@@ -32,8 +36,8 @@ def _seed_selected_origin(connection: sqlite3.Connection, suffix: int) -> tuple[
     connection.execute(
         "INSERT INTO source_snapshots "
         "(id, capture_id, source_id, stored_blob_id, request_fingerprint, retrieved_at) "
-        "VALUES (?, ?, 'arxiv', ?, ?, ?)",
-        (snapshot_id, capture_id, blob_id, "f" * 64, NOW),
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (snapshot_id, capture_id, source_id, blob_id, "f" * 64, NOW),
     )
     connection.execute(
         "INSERT INTO snapshot_records "
@@ -45,14 +49,14 @@ def _seed_selected_origin(connection: sqlite3.Connection, suffix: int) -> tuple[
         "INSERT INTO ingestion_runs "
         "(id, source_id, prepared_digest, query_json, status, started_at, selected_records, "
         "new_papers, new_versions, metadata_updates, unchanged_records, failed_records) "
-        "VALUES (?, 'arxiv', ?, ?, 'running', ?, 1, 0, 0, 0, 0, 0)",
-        (run_id, "d" * 64, '{"schema_version":"discovery-query-v1"}', NOW),
+        "VALUES (?, ?, ?, ?, 'running', ?, 1, 0, 0, 0, 0, 0)",
+        (run_id, source_id, "d" * 64, '{"schema_version":"discovery-query-v1"}', NOW),
     )
     connection.execute(
         "INSERT INTO ingestion_run_snapshots "
         "(run_id, page_ordinal, source_snapshot_id, source_id) "
-        "VALUES (?, 0, ?, 'arxiv')",
-        (run_id, snapshot_id),
+        "VALUES (?, 0, ?, ?)",
+        (run_id, snapshot_id, source_id),
     )
     connection.execute(
         "INSERT INTO ingestion_run_selected_records "
@@ -188,16 +192,18 @@ def test_metadata_artifact_observation_belongs_to_same_version(database_path: Pa
         origin_2 = _seed_selected_origin(connection, 80)
         connection.execute(
             "INSERT INTO version_observations "
-            "(id, paper_version_id, normalized_sha256, observed_at, origin_run_id, "
+            "(id, paper_version_id, normalized_sha256, observed_at, origin_source_id, "
+            "origin_run_id, "
             "origin_source_snapshot_id, origin_record_ordinal, title, title_normalized) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, 'One', 'one')",
+            "VALUES (?, ?, ?, ?, 'arxiv', ?, ?, ?, 'One', 'one')",
             (observation_1, VERSION_1, "a" * 64, NOW, *origin_1),
         )
         connection.execute(
             "INSERT INTO version_observations "
-            "(id, paper_version_id, normalized_sha256, observed_at, origin_run_id, "
+            "(id, paper_version_id, normalized_sha256, observed_at, origin_source_id, "
+            "origin_run_id, "
             "origin_source_snapshot_id, origin_record_ordinal, title, title_normalized) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, 'Two', 'two')",
+            "VALUES (?, ?, ?, ?, 'arxiv', ?, ?, ?, 'Two', 'two')",
             (observation_2, VERSION_2, "b" * 64, NOW, *origin_2),
         )
         connection.execute(
@@ -236,9 +242,10 @@ def test_metadata_artifact_blob_matches_observation_digest(database_path: Path) 
         origin = _seed_selected_origin(connection, 90)
         connection.execute(
             "INSERT INTO version_observations "
-            "(id, paper_version_id, normalized_sha256, observed_at, origin_run_id, "
+            "(id, paper_version_id, normalized_sha256, observed_at, origin_source_id, "
+            "origin_run_id, "
             "origin_source_snapshot_id, origin_record_ordinal, title, title_normalized) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, 'One', 'one')",
+            "VALUES (?, ?, ?, ?, 'arxiv', ?, ?, ?, 'One', 'one')",
             (observation, VERSION_1, "a" * 64, NOW, *origin),
         )
         connection.execute(
@@ -369,3 +376,87 @@ def test_run_snapshot_composite_keys_enforce_one_source(database_path: Path) -> 
                 "VALUES (?, 0, ?, 'crossref')",
                 (crossref_run, snapshot_id),
             )
+
+
+def test_provenance_composite_keys_enforce_source_equality(database_path: Path) -> None:
+    with _connection(database_path) as connection:
+        connection.execute(
+            "INSERT INTO sources (id, base_url, enabled) "
+            "VALUES ('crossref', 'https://api.crossref.org', 1)"
+        )
+        arxiv_run, arxiv_snapshot, _ = _seed_selected_origin(connection, 150)
+        crossref_run, crossref_snapshot, _ = _seed_selected_origin(connection, 160, "crossref")
+        paper_id = "01890f3a-0000-7000-8000-000000000170"
+        version_id = "01890f3a-0000-7000-8000-000000000171"
+        connection.execute("INSERT INTO papers (id, created_at) VALUES (?, ?)", (paper_id, NOW))
+        connection.execute(
+            "INSERT INTO paper_versions "
+            "(id, paper_id, source_id, source_version_key, is_current, created_at) "
+            "VALUES (?, ?, 'arxiv', '2608.00001v1', 1, ?)",
+            (version_id, paper_id, NOW),
+        )
+        connection.execute(
+            "INSERT INTO paper_identifiers (paper_id, scheme, canonical_value) "
+            "VALUES (?, 'doi', '10.1000/source-equality')",
+            (paper_id,),
+        )
+
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute(
+                "INSERT INTO paper_identifier_evidence "
+                "(scheme, canonical_value, source_id, source_snapshot_id, record_ordinal, "
+                "observed_at) VALUES ('doi', '10.1000/source-equality', 'crossref', ?, 0, ?)",
+                (arxiv_snapshot, NOW),
+            )
+
+        connection.execute(
+            "INSERT INTO version_identifiers "
+            "(paper_version_id, scheme, canonical_value) "
+            "VALUES (?, 'doi-version', '10.1000/source-equality.v1')",
+            (version_id,),
+        )
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute(
+                "INSERT INTO version_identifier_evidence "
+                "(scheme, canonical_value, source_id, source_snapshot_id, record_ordinal, "
+                "observed_at) VALUES "
+                "('doi-version', '10.1000/source-equality.v1', 'crossref', ?, 0, ?)",
+                (arxiv_snapshot, NOW),
+            )
+
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute(
+                "INSERT INTO version_observations "
+                "(id, paper_version_id, normalized_sha256, observed_at, origin_source_id, "
+                "origin_run_id, "
+                "origin_source_snapshot_id, origin_record_ordinal, title, title_normalized) "
+                "VALUES ('01890f3a-0000-7000-8000-000000000172', ?, ?, ?, 'crossref', ?, ?, 0, "
+                "'Wrong source', 'wrong source')",
+                (version_id, "a" * 64, NOW, crossref_run, crossref_snapshot),
+            )
+
+        observation_id = "01890f3a-0000-7000-8000-000000000173"
+        connection.execute(
+            "INSERT INTO version_observations "
+            "(id, paper_version_id, normalized_sha256, observed_at, origin_source_id, "
+            "origin_run_id, origin_source_snapshot_id, origin_record_ordinal, title, "
+            "title_normalized) VALUES (?, ?, ?, ?, 'arxiv', ?, ?, 0, 'Valid', 'valid')",
+            (observation_id, version_id, "b" * 64, NOW, arxiv_run, arxiv_snapshot),
+        )
+        author_id = "01890f3a-0000-7000-8000-000000000174"
+        connection.execute("INSERT INTO authors (id, created_at) VALUES (?, ?)", (author_id, NOW))
+        connection.execute(
+            "INSERT INTO author_identifiers "
+            "(author_id, scheme, canonical_value, verification_status) "
+            "VALUES (?, 'orcid', '0000-0001-2345-6789', 'source_asserted')",
+            (author_id,),
+        )
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute(
+                "INSERT INTO author_identifier_evidence "
+                "(scheme, canonical_value, version_observation_id, source_id, observed_at) "
+                "VALUES ('orcid', '0000-0001-2345-6789', ?, 'crossref', ?)",
+                (observation_id, NOW),
+            )
+
+        assert arxiv_run != crossref_run

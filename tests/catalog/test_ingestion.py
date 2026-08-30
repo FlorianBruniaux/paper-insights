@@ -79,6 +79,7 @@ def _manifest(
     normalized: str = "a" * 64,
     raw_payload: bytes = b"source-page",
     selected: bool = True,
+    doi: str = "10.1000/catalog",
 ) -> tuple[AttachPreparedRun, ObservedPaperVersion]:
     locator = RecordLocator(
         page_ordinal=0,
@@ -101,7 +102,7 @@ def _manifest(
         identifiers=(
             ObservedIdentifier(
                 scheme="doi",
-                canonical_value="10.1000/catalog",
+                canonical_value=doi,
                 scope=IdentifierScope.PAPER,
             ),
         ),
@@ -367,6 +368,43 @@ def test_record_item_routes_identifiers_and_classifies_all_outcomes(engine: Engi
         paper = snapshot.get_paper(PaperSelector.by_arxiv("2608.00001"))
     assert paper is not None
     assert tuple(item.observed.page_ordinal for item in paper.observations) == (0, 0, 0)
+
+
+def test_reader_scopes_identifiers_to_each_observation_provenance(engine: Engine) -> None:
+    factory = _factory(engine)
+    cases = (
+        (IDS[80], IDS[81], "a" * 64, "10.1000/first"),
+        (IDS[82], IDS[83], "d" * 64, "10.1000/second"),
+    )
+    for run_id, capture_id, normalized, doi in cases:
+        command, observed = _manifest(
+            run_id=run_id,
+            capture_id=capture_id,
+            normalized=normalized,
+            doi=doi,
+        )
+        with factory.begin() as uow:
+            attached = uow.ingestion.attach_prepared_run(command)
+            uow.commit()
+        with factory.begin() as uow:
+            uow.ingestion.record_item(
+                _record(command, attached.snapshots[0].snapshot_id.value, observed)
+            )
+            uow.ingestion.finalize_run(command.run_id)
+            uow.commit()
+
+    reader = SqliteCatalogReader(engine)
+    with reader.snapshot() as snapshot:
+        paper = snapshot.get_paper(PaperSelector.by_arxiv("2608.00001"))
+
+    assert paper is not None
+    assert tuple(
+        tuple((item.scheme, item.canonical_value) for item in observation.observed.identifiers)
+        for observation in paper.observations
+    ) == (
+        (("doi", "10.1000/first"),),
+        (("doi", "10.1000/second"),),
+    )
 
 
 def test_failure_retry_and_repair_are_idempotent_revisioned_transactions(

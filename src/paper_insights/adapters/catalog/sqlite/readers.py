@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from pathlib import Path
 from types import TracebackType
 from typing import Literal
+from urllib.parse import quote
 from uuid import UUID
 
 import sqlalchemy as sa
-from sqlalchemy import Connection, Engine
+from sqlalchemy import Connection, Engine, create_engine
+from sqlalchemy.pool import NullPool
 
 from paper_insights.domain.acquisition import (
     IdentifierScope,
@@ -48,22 +51,35 @@ class CatalogRevisionMismatch(RuntimeError):
 class SqliteCatalogSnapshot:
     def __init__(self, engine: Engine) -> None:
         self._engine = engine
+        database = engine.url.database
+        if database is None or database == ":memory:":
+            raise ValueError("catalog snapshots require a file-backed database")
+        self._database_path = Path(database)
+        self._read_engine: Engine | None = None
         self._connection: Connection | None = None
         self.revision = CatalogRevision(0)
 
     def __enter__(self) -> SqliteCatalogSnapshot:
         if self._connection is not None:
             raise RuntimeError("catalog snapshot is already open")
-        connection = self._engine.connect()
+        database_uri = quote(str(self._database_path), safe="/")
+        read_engine = create_engine(
+            f"sqlite+pysqlite:///file:{database_uri}?mode=ro&uri=true",
+            poolclass=NullPool,
+        )
         try:
+            connection = read_engine.connect()
             connection.exec_driver_sql("PRAGMA query_only = ON")
             connection.exec_driver_sql("BEGIN")
             revision = connection.execute(
                 sa.text("SELECT revision FROM catalog_meta WHERE singleton_id = 1")
             ).scalar_one()
         except BaseException:
-            connection.close()
+            if "connection" in locals():
+                connection.close()
+            read_engine.dispose()
             raise
+        self._read_engine = read_engine
         self._connection = connection
         self.revision = CatalogRevision(int(revision))
         return self
@@ -82,6 +98,9 @@ class SqliteCatalogSnapshot:
             finally:
                 connection.close()
                 self._connection = None
+                if self._read_engine is not None:
+                    self._read_engine.dispose()
+                    self._read_engine = None
         return False
 
     def _require_open(self) -> Connection:
@@ -238,13 +257,18 @@ class SqliteCatalogSnapshot:
         if paper_id is None:
             return None
         if selector.paper_version_id is None:
-            version_id = connection.execute(
-                sa.text(
-                    "SELECT id FROM paper_versions WHERE paper_id = :paper_id "
-                    "AND is_current = 1 ORDER BY source_id, id LIMIT 1"
-                ),
-                {"paper_id": str(paper_id)},
-            ).scalar_one_or_none()
+            version_ids = tuple(
+                connection.execute(
+                    sa.text(
+                        "SELECT id FROM paper_versions WHERE paper_id = :paper_id "
+                        "AND is_current = 1 ORDER BY source_id, id"
+                    ),
+                    {"paper_id": str(paper_id)},
+                ).scalars()
+            )
+            if len(version_ids) != 1:
+                return None
+            version_id = version_ids[0]
         else:
             version_id = connection.execute(
                 sa.text(
@@ -355,14 +379,27 @@ class SqliteCatalogSnapshot:
         ).scalar_one()
         identifier_rows = connection.execute(
             sa.text(
-                "SELECT scheme, canonical_value, 'paper' AS scope FROM paper_identifiers "
-                "WHERE paper_id = :paper_id "
+                "SELECT pi.scheme, pi.canonical_value, 'paper' AS scope "
+                "FROM paper_identifiers AS pi JOIN paper_identifier_evidence AS evidence "
+                "ON evidence.scheme = pi.scheme AND evidence.canonical_value = "
+                "pi.canonical_value WHERE pi.paper_id = :paper_id "
+                "AND evidence.source_snapshot_id = :snapshot "
+                "AND evidence.record_ordinal = :record "
                 "UNION ALL "
-                "SELECT scheme, canonical_value, 'version' AS scope FROM version_identifiers "
-                "WHERE paper_version_id = :version_id "
-                "ORDER BY scheme, canonical_value"
+                "SELECT vi.scheme, vi.canonical_value, 'version' AS scope "
+                "FROM version_identifiers AS vi JOIN version_identifier_evidence AS evidence "
+                "ON evidence.scheme = vi.scheme AND evidence.canonical_value = "
+                "vi.canonical_value WHERE vi.paper_version_id = :version_id "
+                "AND evidence.source_snapshot_id = :snapshot "
+                "AND evidence.record_ordinal = :record "
+                "ORDER BY 1, 2"
             ),
-            {"paper_id": paper_id, "version_id": row["paper_version_id"]},
+            {
+                "paper_id": paper_id,
+                "version_id": row["paper_version_id"],
+                "snapshot": provenance["snapshot_id"],
+                "record": provenance["record_ordinal"],
+            },
         ).mappings()
         observed = ObservedPaperVersion(
             source_id=SourceId(row["source_id"]),

@@ -89,6 +89,7 @@ paper_versions = sa.Table(
     sa.Column("created_at", sa.String(35), nullable=False),
     sa.UniqueConstraint("source_id", "source_version_key", name="uq_source_version"),
     sa.UniqueConstraint("id", "paper_id", name="uq_version_paper"),
+    sa.UniqueConstraint("id", "source_id", name="uq_version_source"),
     sa.CheckConstraint(_uuid7_check("id"), name="id_uuid7"),
     sa.CheckConstraint("source_version_key <> ''", name="source_version_key_nonempty"),
     sa.CheckConstraint("is_current IN (0, 1)", name="is_current_boolean"),
@@ -113,6 +114,7 @@ version_observations = sa.Table(
     ),
     sa.Column("normalized_sha256", sa.String(64), nullable=False),
     sa.Column("observed_at", sa.String(35), nullable=False),
+    sa.Column("origin_source_id", sa.String(64), nullable=False),
     sa.Column("origin_run_id", sa.String(36), nullable=False),
     sa.Column("origin_source_snapshot_id", sa.String(36), nullable=False),
     sa.Column("origin_record_ordinal", sa.Integer, nullable=False),
@@ -129,6 +131,7 @@ version_observations = sa.Table(
         "paper_version_id", "normalized_sha256", name="uq_version_observation_hash"
     ),
     sa.UniqueConstraint("id", "paper_version_id", name="uq_observation_version"),
+    sa.UniqueConstraint("id", "origin_source_id", name="uq_observation_source"),
     sa.ForeignKeyConstraint(
         ["origin_run_id", "origin_source_snapshot_id", "origin_record_ordinal"],
         [
@@ -136,6 +139,18 @@ version_observations = sa.Table(
             "ingestion_run_selected_records.source_snapshot_id",
             "ingestion_run_selected_records.record_ordinal",
         ],
+    ),
+    sa.ForeignKeyConstraint(
+        ["paper_version_id", "origin_source_id"],
+        ["paper_versions.id", "paper_versions.source_id"],
+    ),
+    sa.ForeignKeyConstraint(
+        ["origin_source_snapshot_id", "origin_source_id"],
+        ["source_snapshots.id", "source_snapshots.source_id"],
+    ),
+    sa.ForeignKeyConstraint(
+        ["origin_run_id", "origin_source_id"],
+        ["ingestion_runs.id", "ingestion_runs.source_id"],
     ),
     sa.CheckConstraint(_uuid7_check("id"), name="id_uuid7"),
     sa.CheckConstraint(_sha_check("normalized_sha256"), name="normalized_sha256"),
@@ -410,6 +425,10 @@ paper_identifier_evidence = sa.Table(
         ["source_snapshot_id", "record_ordinal"],
         ["snapshot_records.source_snapshot_id", "snapshot_records.ordinal"],
     ),
+    sa.ForeignKeyConstraint(
+        ["source_snapshot_id", "source_id"],
+        ["source_snapshots.id", "source_snapshots.source_id"],
+    ),
 )
 
 version_identifier_evidence = sa.Table(
@@ -429,6 +448,10 @@ version_identifier_evidence = sa.Table(
         ["source_snapshot_id", "record_ordinal"],
         ["snapshot_records.source_snapshot_id", "snapshot_records.ordinal"],
     ),
+    sa.ForeignKeyConstraint(
+        ["source_snapshot_id", "source_id"],
+        ["source_snapshots.id", "source_snapshots.source_id"],
+    ),
 )
 
 author_identifier_evidence = sa.Table(
@@ -444,6 +467,10 @@ author_identifier_evidence = sa.Table(
         ["author_identifiers.scheme", "author_identifiers.canonical_value"],
     ),
     sa.ForeignKeyConstraint(["version_observation_id"], ["version_observations.id"]),
+    sa.ForeignKeyConstraint(
+        ["version_observation_id", "source_id"],
+        ["version_observations.id", "version_observations.origin_source_id"],
+    ),
 )
 
 paper_authors = sa.Table(

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import deque
 from datetime import UTC, datetime
+from pathlib import Path
 from uuid import UUID
 
 import pytest
@@ -9,6 +10,7 @@ import sqlalchemy as sa
 from sqlalchemy import Engine
 from sqlalchemy.exc import OperationalError
 
+from paper_insights.adapters.catalog.sqlite.engine import create_catalog_engine
 from paper_insights.adapters.catalog.sqlite.readers import (
     CatalogRevisionMismatch,
     SqliteCatalogReader,
@@ -16,7 +18,7 @@ from paper_insights.adapters.catalog.sqlite.readers import (
 )
 from paper_insights.adapters.catalog.sqlite.uow import SqliteCatalogUnitOfWorkFactory
 from paper_insights.domain.corpus import CitationSelector, CreateCollection
-from paper_insights.domain.identifiers import PaperId, PaperSelector
+from paper_insights.domain.identifiers import PaperId, PaperSelector, PaperVersionId
 from paper_insights.domain.retrieval import CatalogRevision
 
 NOW = datetime(2026, 8, 29, 8, 0, tzinfo=UTC)
@@ -177,9 +179,10 @@ def test_snapshot_reconstructs_versioned_paper_index_and_citation(engine: Engine
         connection.execute(
             sa.text(
                 "INSERT INTO version_observations "
-                "(id, paper_version_id, normalized_sha256, observed_at, origin_run_id, "
+                "(id, paper_version_id, normalized_sha256, observed_at, origin_source_id, "
+                "origin_run_id, "
                 "origin_source_snapshot_id, origin_record_ordinal, title, title_normalized, "
-                "abstract, source_url) VALUES (:id, :version_id, :sha, :now, :run, "
+                "abstract, source_url) VALUES (:id, :version_id, :sha, :now, 'arxiv', :run, "
                 ":snapshot, 0, 'Exact title', 'exact title', 'Exact abstract', "
                 "'https://arxiv.org/abs/2608.00001')"
             ),
@@ -244,6 +247,37 @@ def test_snapshot_reconstructs_versioned_paper_index_and_citation(engine: Engine
     assert citation.snapshot_id.value == snapshot_id
     assert citation.source_item_id == "2608.00001"
 
+    with engine.begin() as connection:
+        connection.execute(
+            sa.text(
+                "INSERT INTO sources (id, base_url, enabled) "
+                "VALUES ('crossref', 'https://api.crossref.org', 1)"
+            )
+        )
+        connection.execute(
+            sa.text(
+                "INSERT INTO paper_versions "
+                "(id, paper_id, source_id, source_version_key, is_current, created_at) "
+                "VALUES (:id, :paper, 'crossref', '10.1000/catalog', 1, :now)"
+            ),
+            {"id": str(IDS[0]), "paper": str(paper_id), "now": now},
+        )
+
+    with reader.snapshot() as ambiguous_snapshot:
+        ambiguous = ambiguous_snapshot.get_citation_input(
+            CitationSelector(paper=PaperSelector(paper_id=paper_id))
+        )
+        explicit = ambiguous_snapshot.get_citation_input(
+            CitationSelector(
+                paper=PaperSelector(paper_id=paper_id),
+                paper_version_id=PaperVersionId(version_id),
+            )
+        )
+
+    assert ambiguous is None
+    assert explicit is not None
+    assert explicit.observation.paper_version_id == PaperVersionId(version_id)
+
 
 def test_snapshot_rejects_current_version_without_metadata_artifact(engine: Engine) -> None:
     paper_id = IDS[3]
@@ -266,3 +300,18 @@ def test_snapshot_rejects_current_version_without_metadata_artifact(engine: Engi
     with reader.snapshot() as snapshot:
         with pytest.raises(RuntimeError, match="metadata artifact"):
             snapshot.list_index_documents()
+
+
+def test_snapshot_missing_database_is_not_created(tmp_path: Path) -> None:
+    database_path = tmp_path / "missing.sqlite3"
+    engine = create_catalog_engine(database_path)
+    reader = SqliteCatalogReader(engine)
+
+    try:
+        with pytest.raises(OperationalError):
+            with reader.snapshot():
+                pass
+    finally:
+        engine.dispose()
+
+    assert not database_path.exists()

@@ -108,6 +108,94 @@ def test_initial_upgrade_can_downgrade_and_reapply(tmp_path: Path) -> None:
         assert connection.execute("SELECT revision FROM catalog_meta").fetchone() == (0,)
 
 
+def test_populated_catalog_can_downgrade_and_reapply(tmp_path: Path) -> None:
+    database_path = tmp_path / "populated-roundtrip.sqlite3"
+    config = Config(str(ROOT / "alembic.ini"))
+    config.set_main_option("script_location", str(ROOT / "alembic"))
+    config.set_main_option("sqlalchemy.url", f"sqlite+pysqlite:///{database_path}")
+    command.upgrade(config, "head")
+    with sqlite3.connect(database_path) as connection:
+        connection.execute("PRAGMA foreign_keys = ON")
+        connection.execute(
+            "INSERT INTO stored_blobs "
+            "(id, sha256, size_bytes, media_type, relative_path, created_at) "
+            "VALUES ('01890f3d-0000-7000-8000-000000000001', ?, 1, "
+            "'application/atom+xml', 'blobs/aa/source', ?)",
+            ("a" * 64, "2026-08-29T08:00:00+00:00"),
+        )
+        connection.execute(
+            "INSERT INTO source_snapshots "
+            "(id, capture_id, source_id, stored_blob_id, request_fingerprint, retrieved_at) "
+            "VALUES ('01890f3d-0000-7000-8000-000000000002', "
+            "'01890f3d-0000-7000-8000-000000000003', 'arxiv', "
+            "'01890f3d-0000-7000-8000-000000000001', ?, ?)",
+            ("b" * 64, "2026-08-29T08:00:00+00:00"),
+        )
+        connection.execute(
+            "INSERT INTO snapshot_records "
+            "(source_snapshot_id, ordinal, source_item_id, source_version_key, "
+            "raw_record_sha256) VALUES "
+            "('01890f3d-0000-7000-8000-000000000002', 0, '2608.00001', "
+            "'2608.00001v1', ?)",
+            ("c" * 64,),
+        )
+        connection.execute(
+            "INSERT INTO ingestion_runs "
+            "(id, source_id, prepared_digest, query_json, status, started_at, "
+            "selected_records, new_papers, new_versions, metadata_updates, "
+            "unchanged_records, failed_records) VALUES "
+            "('01890f3d-0000-7000-8000-000000000004', 'arxiv', ?, "
+            "'{\"schema_version\":\"discovery-query-v1\"}', 'running', ?, 1, 0, 0, 0, 0, 0)",
+            ("d" * 64, "2026-08-29T08:00:00+00:00"),
+        )
+        connection.execute(
+            "INSERT INTO ingestion_run_snapshots "
+            "(run_id, page_ordinal, source_snapshot_id, source_id) VALUES "
+            "('01890f3d-0000-7000-8000-000000000004', 0, "
+            "'01890f3d-0000-7000-8000-000000000002', 'arxiv')"
+        )
+        connection.execute(
+            "INSERT INTO ingestion_run_selected_records "
+            "(run_id, selection_ordinal, source_snapshot_id, record_ordinal) VALUES "
+            "('01890f3d-0000-7000-8000-000000000004', 0, "
+            "'01890f3d-0000-7000-8000-000000000002', 0)"
+        )
+        connection.execute(
+            "INSERT INTO papers (id, created_at) VALUES "
+            "('01890f3d-0000-7000-8000-000000000005', ?)",
+            ("2026-08-29T08:00:00+00:00",),
+        )
+        connection.execute(
+            "INSERT INTO paper_versions "
+            "(id, paper_id, source_id, source_version_key, is_current, created_at) VALUES "
+            "('01890f3d-0000-7000-8000-000000000006', "
+            "'01890f3d-0000-7000-8000-000000000005', 'arxiv', '2608.00001v1', 1, ?)",
+            ("2026-08-29T08:00:00+00:00",),
+        )
+        connection.execute(
+            "INSERT INTO version_observations "
+            "(id, paper_version_id, normalized_sha256, observed_at, origin_source_id, "
+            "origin_run_id, origin_source_snapshot_id, origin_record_ordinal, title, "
+            "title_normalized) VALUES "
+            "('01890f3d-0000-7000-8000-000000000007', "
+            "'01890f3d-0000-7000-8000-000000000006', ?, ?, 'arxiv', "
+            "'01890f3d-0000-7000-8000-000000000004', "
+            "'01890f3d-0000-7000-8000-000000000002', 0, 'Title', 'title')",
+            ("e" * 64, "2026-08-29T08:00:00+00:00"),
+        )
+        connection.execute(
+            "UPDATE snapshot_records SET version_observation_id = "
+            "'01890f3d-0000-7000-8000-000000000007'"
+        )
+
+    command.downgrade(config, "base")
+    command.upgrade(config, "head")
+
+    with sqlite3.connect(database_path) as connection:
+        assert connection.execute("PRAGMA quick_check").fetchone() == ("ok",)
+        assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+
+
 def test_head_schema_matches_sqlalchemy_metadata(tmp_path: Path) -> None:
     database_path = tmp_path / "catalog.sqlite3"
     migrate_to_head(database_path)
