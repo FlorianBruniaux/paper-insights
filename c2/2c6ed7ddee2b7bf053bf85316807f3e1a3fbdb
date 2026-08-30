@@ -1,0 +1,75 @@
+tests/search/test_hostile_queries.py
+  s_2f2b8a177ba283::t_20ed2ae8c244c8 1-127
+tests/benchmarks/__init__.py
+  s_2f2b8a177ba283::t_39241df9b36c1b 1
+  s_2f2b8a177ba283::t_fe0a97083cf48e 2-12
+tests/search/test_passage_ids.py
+  s_2f2b8a177ba283::t_f3a5d41ceb9672 1-28,32-51
+  s_2f2b8a177ba283::t_63db8c482b8d3d 29-31
+src/paper_insights/adapters/search/sqlite_fts/builder.py
+  s_2f2b8a177ba283::t_380fb220bbe5f6 3-7,12,17,24,26,66-67,70-123,128-145,148-200
+  s_2f2b8a177ba283::t_917ea01ee7608e 1-2,10,23,31-33
+  s_2f2b8a177ba283::t_1beb55bdaedad5 8,13,16,18-19,21-22,25,27-30,34-61
+  s_2f2b8a177ba283::t_e6e733328d1d00 9,11,14-15,20,62-65,68-69,124-127,146-147
+  s_2f2b8a177ba283::t_b51773b6afd85c 201-300
+tests/benchmarks/search_queries.jsonl
+  s_2f2b8a177ba283::t_652cdc7f85ebe4 1-30
+src/paper_insights/adapters/search/sqlite_fts/reader.py
+  s_2f2b8a177ba283::t_8f5169a05f7dbc 194-197
+  s_2f2b8a177ba283::t_c46c2a0870b962 3-4,6,9-15,17-19,22-23,28-29,31,33,42-46,49-108,111-168,171-184,187-193,198-229,231-239,241-244
+  s_2f2b8a177ba283::t_14f727471e1989 1-2,5,7-8,16,20-21,24-27,30,32,34-41,47-48,109-110,169-170
+  s_2f2b8a177ba283::t_1662efea87d673 185-186,230,240
+src/paper_insights/adapters/search/__init__.py
+  s_2f2b8a177ba283::t_917ea01ee7608e 1
+src/paper_insights/adapters/search/sqlite_fts/__init__.py
+  s_2f2b8a177ba283::t_917ea01ee7608e 1
+tests/search/test_builder.py
+  s_2f2b8a177ba283::t_e39e322c49d174 93,160-174,176-179
+  s_2f2b8a177ba283::t_fdcb27d84b4b6b 7,14,45-87,211-250
+  s_2f2b8a177ba283::t_0b70be7d33b339 1-6,8-13,15-44,88-92,94-159,180-195,200-210
+  s_2f2b8a177ba283::t_dffa73557645b1 251-272
+  s_2f2b8a177ba283::t_342a6ee92bcd07 175
+  s_2f2b8a177ba283::t_63db8c482b8d3d 196-199
+tests/search/__init__.py
+  s_2f2b8a177ba283::t_39241df9b36c1b 1
+  s_2f2b8a177ba283::t_fe0a97083cf48e 2-12
+src/paper_insights/application/research/index.py
+  s_2f2b8a177ba283::t_5913e2f8ff7e1a 7,17-24,26,38
+  s_2f2b8a177ba283::t_1662efea87d673 25,27-30
+  s_2f2b8a177ba283::t_f8a142fe8b9177 31-37
+  s_2f2b8a177ba283::t_def9c6eb42b0cd 1-6,8-16
+src/paper_insights/application/research/search.py
+  s_2f2b8a177ba283::t_4a9bbf1632601c 1-20,22-23,25-26
+  s_2f2b8a177ba283::t_54a1f652b5bd95 21,24,27
+src/paper_insights/adapters/search/sqlite_fts/schema.py
+  s_2f2b8a177ba283::t_e6e733328d1d00 1-2,8,10,13,15,88
+  s_2f2b8a177ba283::t_0f73477c0de40b 5-7,9,11-12,14,16-87,89
+  s_2f2b8a177ba283::t_5a6f31bb5551aa 3-4,115-116,126-197
+  s_2f2b8a177ba283::t_46be2045813d9c 90-104,107-114,117-125
+  s_2f2b8a177ba283::t_6316ae6146be14 105-106
+src/paper_insights/application/research/__init__.py
+  s_2f2b8a177ba283::t_def9c6eb42b0cd 1
+tests/benchmarks/test_search_relevance.py
+  s_2f2b8a177ba283::t_652cdc7f85ebe4 1-62
+tests/search/test_reader.py
+  s_2f2b8a177ba283::t_7b86c92cead175 1-14,16-77,79-124,127-179
+  s_2f2b8a177ba283::t_1af260d149d403 15,195-208
+  s_2f2b8a177ba283::t_7656d3b971f845 78,180-194
+  s_2f2b8a177ba283::t_9d42228830632c 125-126
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "c22c6ed7ddee2b7bf053bf85316807f3e1a3fbdb",
+  "prompts": {},
+  "sessions": {
+    "s_2f2b8a177ba283": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a04a7c-f938-7500-b20e-0faa6c4019c5",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Florian BRUNIAUX <florian@bruniaux.com>"
+    }
+  }
+}
