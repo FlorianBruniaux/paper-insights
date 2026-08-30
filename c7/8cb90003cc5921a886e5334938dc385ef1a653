@@ -1,0 +1,52 @@
+tests/catalog/test_ingestion.py
+  s_2f2b8a177ba283::t_3a8005a5457779 82,105,373-407
+  s_2f2b8a177ba283::t_438971156e7f9b 408-409
+alembic/versions/0001_initial_catalog.py
+  s_2f2b8a177ba283::t_6af26bfc5c523a 783,785-790,794-795,797,804,809-810
+  s_2f2b8a177ba283::t_434b9228571450 167,196-200,210-214,220-224,226,402,516-520,643-647,732-736
+  s_2f2b8a177ba283::t_fe4ae6189e2190 791-793,796
+src/paper_insights/adapters/catalog/sqlite/readers.py
+  s_2f2b8a177ba283::t_dc80228ab40f67 4,7,11-12,54-58,65-69,80,82,101-103,260-271,382-387,389-394,397-402
+  s_2f2b8a177ba283::t_e281cd2148a708 395
+  s_2f2b8a177ba283::t_e58dafcf9ae43a 71,78-79
+src/paper_insights/adapters/catalog/sqlite/uow.py
+  s_2f2b8a177ba283::t_e58dafcf9ae43a 604-605,608,617
+  s_2f2b8a177ba283::t_08d3d421c64e37 609-610
+  s_2f2b8a177ba283::t_ad76e3420dc191 12-17,1318-1320,1322,1406
+tests/catalog/test_protocol_types.py
+  s_2f2b8a177ba283::t_dabc563595f03a 1-4,6-8,12,14-17
+  s_2f2b8a177ba283::t_ea20fcf71bd551 5,9-11,13
+src/paper_insights/adapters/catalog/sqlite/models.py
+  s_2f2b8a177ba283::t_e58dafcf9ae43a 451-453
+  s_2f2b8a177ba283::t_9085a1adaddb18 92,117,134,143-154,428-431,454,470-473
+tests/catalog/protocol_probe.py
+  s_2f2b8a177ba283::t_dabc563595f03a 1-27
+tests/catalog/test_snapshot.py
+  s_2f2b8a177ba283::t_8ffd2bf96e0d72 21,250-280,303-317
+  s_2f2b8a177ba283::t_9a0ddac4dd1442 182-183,185
+  s_2f2b8a177ba283::t_38825417f76848 5,13
+tests/catalog/test_constraints.py
+  s_2f2b8a177ba283::t_845b42ca9cc277 414-419,422-430,438-462
+  s_2f2b8a177ba283::t_27683f5beedf48 379-413,420-421,431,434,436-437
+  s_2f2b8a177ba283::t_cea68be98e7183 21-25,39-40,52-53,58-59
+  s_2f2b8a177ba283::t_9a0ddac4dd1442 195-196,198,203-204,206,245-246,248,432-433,435
+tests/catalog/test_migrations.py
+  s_2f2b8a177ba283::t_404970668ed779 142-189
+  s_2f2b8a177ba283::t_c364c5017393a2 111-141,190-198
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "c78cb90003cc5921a886e5334938dc385ef1a653",
+  "prompts": {},
+  "sessions": {
+    "s_2f2b8a177ba283": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a04a7c-f938-7500-b20e-0faa6c4019c5",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Florian BRUNIAUX <florian@bruniaux.com>"
+    }
+  }
+}
