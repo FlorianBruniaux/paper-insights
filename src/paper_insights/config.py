@@ -169,13 +169,20 @@ class Settings:
         ):
             raise SettingsError("sources.arxiv.categories must be a list of strings")
         page_size = _integer(arxiv.get("page_size", 100), "sources.arxiv.page_size")
-        if page_size <= 0:
-            raise SettingsError("sources.arxiv.page_size must be positive")
+        if not 1 <= page_size <= 100:
+            raise SettingsError("sources.arxiv.page_size must be positive and at most 100")
 
         default_limit = _integer(search.get("default_limit", 10), "search.default_limit")
         maximum_limit = _integer(search.get("maximum_limit", 50), "search.maximum_limit")
-        if default_limit <= 0 or maximum_limit <= 0 or default_limit > maximum_limit:
-            raise SettingsError("default search limit must be positive and at most maximum")
+        if (
+            default_limit <= 0
+            or maximum_limit <= 0
+            or default_limit > maximum_limit
+            or maximum_limit > 50
+        ):
+            raise SettingsError(
+                "default search limit must be positive and at most maximum; maximum is at most 50"
+            )
 
         provider = analysis.get("provider", "")
         model = analysis.get("model", "")

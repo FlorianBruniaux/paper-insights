@@ -54,3 +54,4 @@ Toutes les modifications notables du projet sont consignées ici.
 - La projection catalogue de recherche inclut source, auteurs ordonnés, catégories, langue, date et collections; son empreinte logique couvre désormais chaque valeur filtrable.
 - La publication FTS restaure l'ancien index canonique après une mutation concurrente du répertoire et ne supprime jamais un nom devenu ambigu; un résidu dans un répertoire déplacé reste alors explicitement non réparé.
 - Les slugs de collection au format UUID sont refusés et le filtre collection interprète sans ambiguïté une valeur UUID comme ID, toute autre valeur comme slug.
+- La configuration refuse désormais une page arXiv supérieure à 100 et une limite de recherche supérieure à 50, conformément aux DTO et adapters publics.
