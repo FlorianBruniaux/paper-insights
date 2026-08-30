@@ -98,7 +98,7 @@ Toutes les connexions catalogue activent `foreign_keys=ON`, un `busy_timeout` co
 
 `catalog_meta.revision` commence à zéro après migration. Une transaction validée qui contient au moins une mutation visible l'incrémente exactement une fois dans la même transaction. Une lecture, un no-op, un rollback ou un échec ne l'incrémente pas.
 
-Une lecture cohérente utilise un `CatalogSnapshot`: la révision et les lignes sont lues dans la même transaction read-only. Le snapshot ouvre le fichier régulier par descripteur avec `mode=ro`, `immutable=1` et `query_only=ON`; il refuse un catalogue ayant un sidecar WAL ou SHM actif au lieu de créer ou modifier ces fichiers. Une mutation concurrente démarrée après l'ouverture ne change pas cette vue, et toute commande mutante revalide ensuite ses préconditions sous sa transaction d'écriture. Aucun iterator ne survit à la fermeture de ce contexte.
+Une lecture cohérente utilise un `CatalogSnapshot`: la révision et les lignes sont lues dans la même transaction read-only. À l'ouverture, le snapshot lit le fichier régulier par un descripteur sans suivi de lien, vérifie avant et après la capture que son identité et ses métadonnées sont stables, puis charge cette image dans une base SQLite en mémoire avec `query_only=ON`. Il refuse un catalogue ayant un sidecar WAL ou SHM actif au lieu de créer ou modifier ces fichiers. La révision et toutes les lignes viennent donc de la même image figée, même si une commande mutante démarre ensuite. Cette garantie consomme temporairement une quantité de mémoire proportionnelle à la taille du catalogue. Toute commande mutante revalide ses préconditions sous sa transaction d'écriture. Aucun iterator ne survit à la fermeture du contexte.
 
 ## Publication de l'index FTS5
 

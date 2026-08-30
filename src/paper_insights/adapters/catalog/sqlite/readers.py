@@ -7,7 +7,6 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from types import TracebackType
 from typing import Literal
-from urllib.parse import quote
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -54,7 +53,7 @@ class CatalogRevisionMismatch(RuntimeError):
     pass
 
 
-def _open_immutable_catalog(database_path: Path) -> int:
+def _read_immutable_catalog(database_path: Path) -> bytes:
     flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
     try:
         descriptor = os.open(database_path, flags)
@@ -62,10 +61,59 @@ def _open_immutable_catalog(database_path: Path) -> int:
         raise OperationalError(None, None, exc) from exc
     try:
         _assert_immutable_catalog(database_path, descriptor)
-    except BaseException:
+        before = os.fstat(descriptor)
+        content = _read_descriptor(descriptor, before.st_size)
+        after = os.fstat(descriptor)
+        _assert_immutable_catalog(database_path, descriptor)
+        if (
+            before.st_dev,
+            before.st_ino,
+            before.st_size,
+            before.st_mtime_ns,
+            before.st_ctime_ns,
+        ) != (
+            after.st_dev,
+            after.st_ino,
+            after.st_size,
+            after.st_mtime_ns,
+            after.st_ctime_ns,
+        ):
+            raise OperationalError(
+                None,
+                None,
+                sqlite3.OperationalError("catalog changed during snapshot capture"),
+            )
+        return content
+    finally:
         os.close(descriptor)
-        raise
-    return descriptor
+
+
+def _read_descriptor(descriptor: int, size: int) -> bytes:
+    chunks: list[bytes] = []
+    offset = 0
+    while offset < size:
+        chunk = os.pread(descriptor, min(1024 * 1024, size - offset), offset)
+        if not chunk:
+            raise OperationalError(
+                None,
+                None,
+                sqlite3.OperationalError("catalog snapshot capture was truncated"),
+            )
+        chunks.append(chunk)
+        offset += len(chunk)
+    return b"".join(chunks)
+
+
+def _memory_catalog_image(content: bytes) -> bytes:
+    if len(content) < 100 or content[:16] != b"SQLite format 3\x00":
+        raise OperationalError(
+            None,
+            None,
+            sqlite3.OperationalError("catalog snapshot capture has an invalid header"),
+        )
+    image = bytearray(content)
+    image[18:20] = b"\x01\x01"
+    return bytes(image)
 
 
 def _assert_immutable_catalog(database_path: Path, descriptor: int) -> None:
@@ -104,32 +152,34 @@ class SqliteCatalogSnapshot:
         self._database_path = Path(database)
         self._read_engine: Engine | None = None
         self._connection: Connection | None = None
-        self._file_descriptor: int | None = None
         self.revision = CatalogRevision(0)
 
     def __enter__(self) -> SqliteCatalogSnapshot:
         if self._connection is not None:
             raise RuntimeError("catalog snapshot is already open")
-        file_descriptor = _open_immutable_catalog(self._database_path)
-        database_uri = quote(f"/dev/fd/{file_descriptor}", safe="/")
+        serialized = _memory_catalog_image(_read_immutable_catalog(self._database_path))
 
         def _open_readonly() -> sqlite3.Connection:
-            return sqlite3.connect(
-                f"file:{database_uri}?mode=ro&immutable=1",
-                uri=True,
-                check_same_thread=False,
-            )
+            connection = sqlite3.connect(":memory:", check_same_thread=False)
+            connection.deserialize(serialized)
+            return connection
 
         read_engine = create_engine(
-            f"sqlite+pysqlite:///{self._database_path}",
+            "sqlite+pysqlite://",
             creator=_open_readonly,
             poolclass=NullPool,
         )
         try:
             connection = read_engine.connect()
-            _assert_immutable_catalog(self._database_path, file_descriptor)
             connection.exec_driver_sql("PRAGMA query_only = ON")
             connection.exec_driver_sql("BEGIN")
+            integrity = connection.exec_driver_sql("PRAGMA quick_check(1)").scalar_one()
+            if integrity != "ok":
+                raise OperationalError(
+                    None,
+                    None,
+                    sqlite3.OperationalError("catalog snapshot capture is invalid"),
+                )
             revision = connection.execute(
                 sa.text("SELECT revision FROM catalog_meta WHERE singleton_id = 1")
             ).scalar_one()
@@ -137,11 +187,9 @@ class SqliteCatalogSnapshot:
             if "connection" in locals():
                 connection.close()
             read_engine.dispose()
-            os.close(file_descriptor)
             raise
         self._read_engine = read_engine
         self._connection = connection
-        self._file_descriptor = file_descriptor
         self.revision = CatalogRevision(int(revision))
         return self
 
@@ -162,9 +210,6 @@ class SqliteCatalogSnapshot:
                 if self._read_engine is not None:
                     self._read_engine.dispose()
                     self._read_engine = None
-                if self._file_descriptor is not None:
-                    os.close(self._file_descriptor)
-                    self._file_descriptor = None
         return False
 
     def _require_open(self) -> Connection:

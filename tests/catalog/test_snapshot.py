@@ -540,8 +540,10 @@ def test_snapshot_does_not_create_wal_or_shared_memory_sidecars(
 ) -> None:
     wal = Path(f"{database_path}-wal")
     shared_memory = Path(f"{database_path}-shm")
+    before = database_path.read_bytes()
     assert not wal.exists()
     assert not shared_memory.exists()
+    assert database_path.read_bytes() == before
 
     reader = SqliteCatalogReader(engine)
     with reader.snapshot() as snapshot:
@@ -565,6 +567,26 @@ def test_snapshot_fails_closed_without_changing_an_active_sidecar(
 
     assert wal.read_bytes() == b"active-writer-witness"
     assert not Path(f"{database_path}-shm").exists()
+
+
+def test_snapshot_captured_before_a_writer_does_not_mix_revisions(engine: Engine) -> None:
+    reader = SqliteCatalogReader(engine)
+
+    with reader.snapshot() as snapshot:
+        assert snapshot.revision == CatalogRevision(0)
+        with engine.begin() as connection:
+            connection.execute(
+                sa.text(
+                    "INSERT INTO collections (id, slug, title, created_at, updated_at) "
+                    "VALUES (:id, 'late', 'Late', :now, :now)"
+                ),
+                {"id": str(IDS[7]), "now": NOW.isoformat()},
+            )
+        assert snapshot.list_collections() == ()
+        assert snapshot.revision == CatalogRevision(0)
+
+    with reader.snapshot() as refreshed:
+        assert tuple(item.slug for item in refreshed.list_collections()) == ("late",)
 
 
 def test_citation_returns_none_when_resolved_paper_has_no_current_version(
