@@ -11,6 +11,7 @@ from sqlalchemy import Engine
 from sqlalchemy.exc import OperationalError
 
 from paper_insights.adapters.catalog.sqlite.engine import create_catalog_engine
+from paper_insights.adapters.catalog.sqlite.errors import CatalogConflict
 from paper_insights.adapters.catalog.sqlite.readers import (
     CatalogRevisionMismatch,
     SqliteCatalogReader,
@@ -220,6 +221,13 @@ def test_snapshot_reconstructs_versioned_paper_index_and_citation(engine: Engine
         )
         connection.execute(
             sa.text(
+                "INSERT INTO paper_identifiers (paper_id, scheme, canonical_value) "
+                "VALUES (:paper, 'doi', '10.1000/catalog')"
+            ),
+            {"paper": str(paper_id)},
+        )
+        connection.execute(
+            sa.text(
                 "UPDATE snapshot_records SET version_observation_id = :observation_id "
                 "WHERE source_snapshot_id = :snapshot_id AND ordinal = 0"
             ),
@@ -264,9 +272,17 @@ def test_snapshot_reconstructs_versioned_paper_index_and_citation(engine: Engine
         )
 
     with reader.snapshot() as ambiguous_snapshot:
-        ambiguous = ambiguous_snapshot.get_citation_input(
-            CitationSelector(paper=PaperSelector(paper_id=paper_id))
+        arxiv_specific = ambiguous_snapshot.get_citation_input(
+            CitationSelector(paper=PaperSelector.by_arxiv("2608.00001"))
         )
+        with pytest.raises(CatalogConflict, match="catalog_conflict"):
+            ambiguous_snapshot.get_citation_input(
+                CitationSelector(paper=PaperSelector(paper_id=paper_id))
+            )
+        with pytest.raises(CatalogConflict, match="catalog_conflict"):
+            ambiguous_snapshot.get_citation_input(
+                CitationSelector(paper=PaperSelector.by_doi("10.1000/catalog"))
+            )
         explicit = ambiguous_snapshot.get_citation_input(
             CitationSelector(
                 paper=PaperSelector(paper_id=paper_id),
@@ -274,7 +290,8 @@ def test_snapshot_reconstructs_versioned_paper_index_and_citation(engine: Engine
             )
         )
 
-    assert ambiguous is None
+    assert arxiv_specific is not None
+    assert arxiv_specific.source_id.value == "arxiv"
     assert explicit is not None
     assert explicit.observation.paper_version_id == PaperVersionId(version_id)
 
@@ -315,3 +332,29 @@ def test_snapshot_missing_database_is_not_created(tmp_path: Path) -> None:
         engine.dispose()
 
     assert not database_path.exists()
+
+
+def test_citation_returns_none_when_resolved_paper_has_no_current_version(
+    engine: Engine,
+) -> None:
+    paper_id = IDS[3]
+    with engine.begin() as connection:
+        connection.execute(
+            sa.text("INSERT INTO papers (id, created_at) VALUES (:id, :now)"),
+            {"id": str(paper_id), "now": NOW.isoformat()},
+        )
+        connection.execute(
+            sa.text(
+                "INSERT INTO paper_identifiers (paper_id, scheme, canonical_value) "
+                "VALUES (:paper, 'doi', '10.1000/no-current')"
+            ),
+            {"paper": str(paper_id)},
+        )
+
+    reader = SqliteCatalogReader(engine)
+    with reader.snapshot() as snapshot:
+        citation = snapshot.get_citation_input(
+            CitationSelector(paper=PaperSelector.by_doi("10.1000/no-current"))
+        )
+
+    assert citation is None

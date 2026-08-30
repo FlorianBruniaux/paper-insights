@@ -764,6 +764,47 @@ def upgrade() -> None:
         "BEGIN SELECT RAISE(ABORT, 'metadata artifact digest mismatch'); END"
     )
     op.execute(
+        "CREATE TRIGGER snapshot_records_source_insert "
+        "BEFORE INSERT ON snapshot_records WHEN NEW.version_observation_id IS NOT NULL "
+        "AND NOT EXISTS(SELECT 1 FROM source_snapshots AS ss "
+        "JOIN version_observations AS vo ON vo.id = NEW.version_observation_id "
+        "WHERE ss.id = NEW.source_snapshot_id AND ss.source_id = vo.origin_source_id) "
+        "BEGIN SELECT RAISE(ABORT, 'snapshot observation source mismatch'); END"
+    )
+    op.execute(
+        "CREATE TRIGGER snapshot_records_source_update "
+        "BEFORE UPDATE OF source_snapshot_id, version_observation_id ON snapshot_records "
+        "WHEN NEW.version_observation_id IS NOT NULL AND NOT EXISTS("
+        "SELECT 1 FROM source_snapshots AS ss "
+        "JOIN version_observations AS vo ON vo.id = NEW.version_observation_id "
+        "WHERE ss.id = NEW.source_snapshot_id AND ss.source_id = vo.origin_source_id) "
+        "BEGIN SELECT RAISE(ABORT, 'snapshot observation source mismatch'); END"
+    )
+    op.execute(
+        "CREATE TRIGGER ingestion_run_items_source_insert "
+        "BEFORE INSERT ON ingestion_run_items WHEN NEW.outcome <> 'failed' AND NOT EXISTS("
+        "SELECT 1 FROM ingestion_runs AS run "
+        "JOIN paper_versions AS version ON version.id = NEW.paper_version_id "
+        "JOIN version_observations AS observation "
+        "ON observation.id = NEW.version_observation_id WHERE run.id = NEW.run_id "
+        "AND run.source_id = version.source_id "
+        "AND run.source_id = observation.origin_source_id) "
+        "BEGIN SELECT RAISE(ABORT, 'ingestion item source mismatch'); END"
+    )
+    op.execute(
+        "CREATE TRIGGER ingestion_run_items_source_update "
+        "BEFORE UPDATE OF run_id, source_snapshot_id, paper_version_id, "
+        "version_observation_id, outcome ON ingestion_run_items "
+        "WHEN NEW.outcome <> 'failed' AND NOT EXISTS("
+        "SELECT 1 FROM ingestion_runs AS run "
+        "JOIN paper_versions AS version ON version.id = NEW.paper_version_id "
+        "JOIN version_observations AS observation "
+        "ON observation.id = NEW.version_observation_id WHERE run.id = NEW.run_id "
+        "AND run.source_id = version.source_id "
+        "AND run.source_id = observation.origin_source_id) "
+        "BEGIN SELECT RAISE(ABORT, 'ingestion item source mismatch'); END"
+    )
+    op.execute(
         "INSERT INTO catalog_meta "
         "(singleton_id, revision, schema_contract_version) VALUES (1, 0, 'catalog-v1')"
     )

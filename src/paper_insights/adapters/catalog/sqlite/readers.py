@@ -43,6 +43,8 @@ from paper_insights.domain.identifiers import (
 )
 from paper_insights.domain.retrieval import CatalogRevision, IndexDocument
 
+from .errors import CatalogConflict
+
 
 class CatalogRevisionMismatch(RuntimeError):
     pass
@@ -257,17 +259,21 @@ class SqliteCatalogSnapshot:
         if paper_id is None:
             return None
         if selector.paper_version_id is None:
+            source_id = "arxiv" if selector.paper.arxiv_id is not None else None
             version_ids = tuple(
                 connection.execute(
                     sa.text(
                         "SELECT id FROM paper_versions WHERE paper_id = :paper_id "
-                        "AND is_current = 1 ORDER BY source_id, id"
+                        "AND is_current = 1 AND (:source_id IS NULL OR source_id = :source_id) "
+                        "ORDER BY source_id, id"
                     ),
-                    {"paper_id": str(paper_id)},
+                    {"paper_id": str(paper_id), "source_id": source_id},
                 ).scalars()
             )
-            if len(version_ids) != 1:
+            if not version_ids:
                 return None
+            if len(version_ids) > 1:
+                raise CatalogConflict()
             version_id = version_ids[0]
         else:
             version_id = connection.execute(

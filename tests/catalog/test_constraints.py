@@ -460,3 +460,70 @@ def test_provenance_composite_keys_enforce_source_equality(database_path: Path) 
             )
 
         assert arxiv_run != crossref_run
+
+
+def test_resolved_records_and_items_cannot_cross_source_boundaries(
+    database_path: Path,
+) -> None:
+    with _connection(database_path) as connection:
+        connection.execute(
+            "INSERT INTO sources (id, base_url, enabled) "
+            "VALUES ('crossref', 'https://api.crossref.org', 1)"
+        )
+        arxiv_run, arxiv_snapshot, _ = _seed_selected_origin(connection, 180)
+        crossref_run, crossref_snapshot, _ = _seed_selected_origin(connection, 190, "crossref")
+        paper_id = "01890f3a-0000-7000-8000-000000000200"
+        version_id = "01890f3a-0000-7000-8000-000000000201"
+        observation_id = "01890f3a-0000-7000-8000-000000000202"
+        connection.execute("INSERT INTO papers (id, created_at) VALUES (?, ?)", (paper_id, NOW))
+        connection.execute(
+            "INSERT INTO paper_versions "
+            "(id, paper_id, source_id, source_version_key, is_current, created_at) "
+            "VALUES (?, ?, 'crossref', '10.1000/source-boundary', 1, ?)",
+            (version_id, paper_id, NOW),
+        )
+        connection.execute(
+            "INSERT INTO version_observations "
+            "(id, paper_version_id, normalized_sha256, observed_at, origin_source_id, "
+            "origin_run_id, origin_source_snapshot_id, origin_record_ordinal, title, "
+            "title_normalized) VALUES (?, ?, ?, ?, 'crossref', ?, ?, 0, 'Crossref', "
+            "'crossref')",
+            (
+                observation_id,
+                version_id,
+                "a" * 64,
+                NOW,
+                crossref_run,
+                crossref_snapshot,
+            ),
+        )
+
+        with pytest.raises(sqlite3.IntegrityError, match="snapshot observation source mismatch"):
+            connection.execute(
+                "UPDATE snapshot_records SET version_observation_id = ? "
+                "WHERE source_snapshot_id = ? AND ordinal = 0",
+                (observation_id, arxiv_snapshot),
+            )
+        with pytest.raises(sqlite3.IntegrityError, match="ingestion item source mismatch"):
+            connection.execute(
+                "INSERT INTO ingestion_run_items "
+                "(run_id, source_snapshot_id, record_ordinal, paper_id, paper_version_id, "
+                "version_observation_id, outcome, created_paper, recorded_at) "
+                "VALUES (?, ?, 0, ?, ?, ?, 'metadata_update', 0, ?)",
+                (arxiv_run, arxiv_snapshot, paper_id, version_id, observation_id, NOW),
+            )
+
+        connection.execute(
+            "UPDATE snapshot_records SET version_observation_id = ? "
+            "WHERE source_snapshot_id = ? AND ordinal = 0",
+            (observation_id, crossref_snapshot),
+        )
+        connection.execute(
+            "INSERT INTO ingestion_run_items "
+            "(run_id, source_snapshot_id, record_ordinal, paper_id, paper_version_id, "
+            "version_observation_id, outcome, created_paper, recorded_at) "
+            "VALUES (?, ?, 0, ?, ?, ?, 'metadata_update', 0, ?)",
+            (crossref_run, crossref_snapshot, paper_id, version_id, observation_id, NOW),
+        )
+
+        assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
