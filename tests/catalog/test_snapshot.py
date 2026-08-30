@@ -551,6 +551,22 @@ def test_snapshot_does_not_create_wal_or_shared_memory_sidecars(
     assert not shared_memory.exists()
 
 
+def test_snapshot_fails_closed_without_changing_an_active_sidecar(
+    database_path: Path,
+    engine: Engine,
+) -> None:
+    wal = Path(f"{database_path}-wal")
+    wal.write_bytes(b"active-writer-witness")
+
+    reader = SqliteCatalogReader(engine)
+    with pytest.raises(OperationalError, match="active WAL sidecar"):
+        with reader.snapshot():
+            pass
+
+    assert wal.read_bytes() == b"active-writer-witness"
+    assert not Path(f"{database_path}-shm").exists()
+
+
 def test_citation_returns_none_when_resolved_paper_has_no_current_version(
     engine: Engine,
 ) -> None:
