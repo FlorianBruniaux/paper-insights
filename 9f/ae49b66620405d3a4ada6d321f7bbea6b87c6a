@@ -1,0 +1,30 @@
+tests/catalog/test_engine.py
+  s_2f2b8a177ba283::t_75da6d7677246e 32
+  s_2f2b8a177ba283::t_2ad4534edad2cc 47,49-51,54
+  s_2f2b8a177ba283::t_aa7c5c83d065f7 1-31,33-46,48,52-53
+src/paper_insights/adapters/catalog/sqlite/engine.py
+  s_2f2b8a177ba283::t_2ad4534edad2cc 21-22,25-28,61-64,71
+  s_2f2b8a177ba283::t_8208ea84e79351 3-5,7,19-20,23-24,29,47,54,59-60,65-70,72
+  s_2f2b8a177ba283::t_08eefebe6b2f28 31-37,41
+  s_2f2b8a177ba283::t_91cb93c6566bcd 30
+docs/ARCHITECTURE.md
+  s_2f2b8a177ba283::t_cef63d9a43fe3c 97
+CHANGELOG.md
+  s_2f2b8a177ba283::t_cef63d9a43fe3c 34
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "9fae49b66620405d3a4ada6d321f7bbea6b87c6a",
+  "prompts": {},
+  "sessions": {
+    "s_2f2b8a177ba283": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a04a7c-f938-7500-b20e-0faa6c4019c5",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Florian BRUNIAUX <florian@bruniaux.com>"
+    }
+  }
+}
