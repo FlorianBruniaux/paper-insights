@@ -236,12 +236,15 @@ def _escape_markdown(value: str) -> str:
     visible = "".join(_visible_control(character) for character in value)
     escaped_html = html.escape(visible, quote=False)
     leading_spaces = len(escaped_html) - len(escaped_html.lstrip(" "))
+    remaining = escaped_html[leading_spaces:]
+    trailing_spaces = len(remaining) - len(remaining.rstrip(" "))
+    middle = remaining[:-trailing_spaces] if trailing_spaces else remaining
     safe_leading_spaces = "&#32;" * leading_spaces
+    safe_trailing_spaces = "&#32;" * trailing_spaces
     escaped_text = "".join(
-        f"\\{character}" if character in r"\`*_[]#>+-.)!(~|" else character
-        for character in escaped_html[leading_spaces:]
+        f"\\{character}" if character in r"\`*_[]#>+-.)!(~|" else character for character in middle
     )
-    return safe_leading_spaces + escaped_text
+    return safe_leading_spaces + escaped_text + safe_trailing_spaces
 
 
 def _visible_control(character: str) -> str:

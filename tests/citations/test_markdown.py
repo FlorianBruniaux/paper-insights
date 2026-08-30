@@ -1,4 +1,5 @@
 import pytest
+from markdown_it import MarkdownIt
 from test_identifier_resolution import SNAPSHOT_ID, make_citation_input
 
 from paper_insights.application.research.citations import (
@@ -128,3 +129,26 @@ def test_markdown_rejects_provenance_identifiers_with_line_endings() -> None:
 
     with pytest.raises(UnsafeCitationValueError, match="unsafe control or formatting"):
         SourceBackedCitationRenderer().render(citation, CitationFormat.MARKDOWN)
+
+
+def test_markdown_preserves_title_edge_spaces_inside_valid_commonmark_emphasis() -> None:
+    result = SourceBackedCitationRenderer().render(
+        make_citation_input(title="  Observed title  "), CitationFormat.MARKDOWN
+    )
+
+    inline = next(
+        token for token in MarkdownIt("commonmark").parse(result.content) if token.children
+    )
+    children = inline.children or []
+    strong_open = next(index for index, token in enumerate(children) if token.type == "strong_open")
+    strong_close = next(
+        index
+        for index, token in enumerate(children[strong_open + 1 :], start=strong_open + 1)
+        if token.type == "strong_close"
+    )
+    visible_title = "".join(
+        token.content for token in children[strong_open + 1 : strong_close] if token.type == "text"
+    )
+
+    assert visible_title == "  Observed title  "
+    assert "**&#32;&#32;Observed title&#32;&#32;**" in result.content
