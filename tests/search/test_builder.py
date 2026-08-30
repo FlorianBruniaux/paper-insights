@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
@@ -314,6 +315,83 @@ def test_injected_replace_crash_preserves_previously_published_index(
     builder.discard(next_candidate)
     assert not next_candidate.path.exists()
     assert published_path.exists()
+
+
+def test_late_source_symlink_swap_restores_previous_published_index(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    published_path = tmp_path / "search-v1.sqlite3"
+    builder = SqliteFtsIndexBuilder(published_path, corpus_root=tmp_path)
+    initial = builder.build_candidate(_request(1, title="Stable published evidence"))
+    builder.publish(initial, _Lease(CatalogRevision(1)))
+    previous_bytes = published_path.read_bytes()
+    candidate = builder.build_candidate(_request(2, title="Replacement evidence"))
+    attacker = tmp_path / "attacker.sqlite3"
+    shutil.copyfile(candidate.path, attacker)
+    real_replace = builder_module.os.replace
+    injected = False
+
+    def swap_source_inside_replace(
+        source: Path | str,
+        destination: Path | str,
+        **options: object,
+    ) -> None:
+        nonlocal injected
+        source_dir = options.get("src_dir_fd")
+        if not injected and destination == published_path.name and isinstance(source_dir, int):
+            injected = True
+            os.unlink(source, dir_fd=source_dir)
+            os.symlink(attacker, source, dir_fd=source_dir)
+        real_replace(source, destination, **options)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(builder_module.os, "replace", swap_source_inside_replace)
+
+    with pytest.raises(ValueError, match=r"binding|symbolic"):
+        builder.publish(candidate, _Lease(CatalogRevision(2)))
+
+    assert injected is True
+    assert published_path.is_symlink() is False
+    assert published_path.read_bytes() == previous_bytes
+    assert read_index_receipt(published_path, corpus_root=tmp_path).generation == 1
+    builder.discard(candidate)
+
+
+def test_late_parent_rename_restores_previous_index_at_canonical_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    published_path = tmp_path / "search" / "search-v1.sqlite3"
+    builder = SqliteFtsIndexBuilder(published_path, corpus_root=tmp_path)
+    initial = builder.build_candidate(_request(1, title="Stable published evidence"))
+    builder.publish(initial, _Lease(CatalogRevision(1)))
+    previous_bytes = published_path.read_bytes()
+    candidate = builder.build_candidate(_request(2, title="Replacement evidence"))
+    displaced_parent = tmp_path / "displaced-search"
+    real_replace = builder_module.os.replace
+    injected = False
+
+    def rename_parent_inside_replace(
+        source: Path | str,
+        destination: Path | str,
+        **options: object,
+    ) -> None:
+        nonlocal injected
+        if not injected and destination == published_path.name:
+            injected = True
+            published_path.parent.rename(displaced_parent)
+            published_path.parent.mkdir()
+        real_replace(source, destination, **options)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(builder_module.os, "replace", rename_parent_inside_replace)
+
+    with pytest.raises(ValueError, match="parent binding changed"):
+        builder.publish(candidate, _Lease(CatalogRevision(2)))
+
+    assert injected is True
+    assert published_path.exists()
+    assert published_path.is_symlink() is False
+    assert published_path.read_bytes() == previous_bytes
+    assert read_index_receipt(published_path, corpus_root=tmp_path).generation == 1
+    builder.discard(candidate)
 
 
 def test_concurrent_candidates_with_same_next_generation_cannot_both_publish(

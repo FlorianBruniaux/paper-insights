@@ -184,8 +184,9 @@ def assert_safe_directory_binding(descriptor: int, path: Path) -> None:
         raise ValueError("search index parent binding changed")
 
 
-def readonly_uri(path: Path) -> str:
-    return f"file:{quote(str(path), safe='/')}?mode=ro"
+def readonly_descriptor_uri(file_descriptor: int) -> str:
+    descriptor_path = f"/dev/fd/{file_descriptor}"
+    return f"file:{quote(descriptor_path, safe='/')}?mode=ro&immutable=1"
 
 
 @contextmanager
@@ -195,7 +196,7 @@ def open_readonly(
     corpus_root: Path,
     timeout_seconds: float = 1.0,
 ) -> Iterator[sqlite3.Connection]:
-    parent_descriptor, filename, safe_path, parent_path = open_confined_parent(
+    parent_descriptor, filename, _, parent_path = open_confined_parent(
         corpus_root,
         path,
         create=False,
@@ -207,7 +208,7 @@ def open_readonly(
         file_descriptor = os.open(filename, _READ_FLAGS, dir_fd=parent_descriptor)
         assert_safe_file_binding(parent_descriptor, filename, file_descriptor)
         connection = sqlite3.connect(
-            readonly_uri(safe_path),
+            readonly_descriptor_uri(file_descriptor),
             uri=True,
             timeout=timeout_seconds,
         )

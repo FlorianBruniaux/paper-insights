@@ -38,6 +38,8 @@ from .schema import (
 _CREATE_FLAGS = (
     os.O_CREAT | os.O_EXCL | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
 )
+_READ_FLAGS = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
+_REAL_OS_REPLACE = os.replace
 
 
 @dataclass(slots=True)
@@ -163,28 +165,84 @@ class SqliteFtsIndexBuilder:
             raise ValueError("revision lease does not match search index candidate")
         if candidate_path.parent != self._published_path.parent:
             raise ValueError("search index candidate is not a sibling of the published index")
-        self._assert_expected_published_generation(candidate.generation - 1)
+        previous_receipt = self._assert_expected_published_generation(candidate.generation - 1)
         self._assert_binding(binding)
         self._reject_sidecars(binding)
         if read_index_receipt(candidate_path, corpus_root=self._corpus_root) != candidate.receipt:
             raise ValueError("search index candidate changed before publication")
         self._assert_binding(binding)
-        assert_safe_target(binding.parent_descriptor, self._published_name)
-        os.replace(
-            binding.filename,
-            self._published_name,
-            src_dir_fd=binding.parent_descriptor,
-            dst_dir_fd=binding.parent_descriptor,
+        staging = self._copy_to_private_binding(
+            binding.file_descriptor,
+            binding.parent_descriptor,
+            binding.parent_path,
+            purpose="publish",
         )
+        rollback: _CandidateBinding | None = None
         try:
-            assert_safe_file_binding(
-                binding.parent_descriptor,
-                self._published_name,
-                binding.file_descriptor,
-            )
-            os.fsync(binding.parent_descriptor)
-        finally:
+            rollback = self._backup_published(binding, previous_receipt)
+            self._assert_binding(binding)
+            self._assert_binding(staging)
+            if (
+                read_index_receipt(
+                    staging.path,
+                    corpus_root=self._corpus_root,
+                )
+                != candidate.receipt
+            ):
+                raise ValueError("private publication copy differs from search index candidate")
+            self._assert_binding(staging)
+            assert_safe_target(staging.parent_descriptor, self._published_name)
+            try:
+                os.replace(
+                    staging.filename,
+                    self._published_name,
+                    src_dir_fd=staging.parent_descriptor,
+                    dst_dir_fd=staging.parent_descriptor,
+                )
+                assert_safe_directory_binding(
+                    staging.parent_descriptor,
+                    staging.parent_path,
+                )
+                assert_safe_file_binding(
+                    staging.parent_descriptor,
+                    self._published_name,
+                    staging.file_descriptor,
+                )
+                if (
+                    read_index_receipt(
+                        self._published_path,
+                        corpus_root=self._corpus_root,
+                    )
+                    != candidate.receipt
+                ):
+                    raise ValueError("published search index differs from validated candidate")
+                assert_safe_directory_binding(
+                    staging.parent_descriptor,
+                    staging.parent_path,
+                )
+                assert_safe_file_binding(
+                    staging.parent_descriptor,
+                    self._published_name,
+                    staging.file_descriptor,
+                )
+                os.fsync(staging.parent_descriptor)
+            except BaseException as primary_error:
+                try:
+                    self._restore_previous(rollback, previous_receipt)
+                except BaseException as rollback_error:
+                    primary_error.add_note(
+                        "search index rollback failed: "
+                        f"{type(rollback_error).__name__}: {rollback_error}"
+                    )
+                raise
+            self._assert_binding(binding)
+            os.unlink(binding.filename, dir_fd=binding.parent_descriptor)
+            self._unlink_sidecars(binding)
             self._close_binding(candidate_path, binding)
+        finally:
+            self._cleanup_private_binding(staging)
+            if rollback is not None:
+                self._cleanup_private_binding(rollback)
         return PublishedIndex(
             path=self._published_path,
             catalog_revision=candidate.catalog_revision,
@@ -197,11 +255,122 @@ class SqliteFtsIndexBuilder:
         if binding is None:
             raise ValueError("search index candidate is not owned by this builder")
         try:
-            self._assert_binding(binding)
+            assert_safe_file_binding(
+                binding.parent_descriptor,
+                binding.filename,
+                binding.file_descriptor,
+            )
             os.unlink(binding.filename, dir_fd=binding.parent_descriptor)
             self._unlink_sidecars(binding)
         finally:
             self._close_binding(candidate_path, binding)
+
+    def _backup_published(
+        self,
+        candidate_binding: _CandidateBinding,
+        expected_receipt: IndexReceipt | None,
+    ) -> _CandidateBinding | None:
+        if expected_receipt is None:
+            return None
+        published_descriptor = os.open(
+            self._published_name,
+            _READ_FLAGS,
+            dir_fd=candidate_binding.parent_descriptor,
+        )
+        try:
+            assert_safe_file_binding(
+                candidate_binding.parent_descriptor,
+                self._published_name,
+                published_descriptor,
+            )
+            backup = self._copy_to_private_binding(
+                published_descriptor,
+                candidate_binding.parent_descriptor,
+                candidate_binding.parent_path,
+                purpose="rollback",
+            )
+            assert_safe_file_binding(
+                candidate_binding.parent_descriptor,
+                self._published_name,
+                published_descriptor,
+            )
+        finally:
+            os.close(published_descriptor)
+        try:
+            if (
+                read_index_receipt(
+                    backup.path,
+                    corpus_root=self._corpus_root,
+                )
+                != expected_receipt
+            ):
+                raise ValueError("rollback copy differs from previous published index")
+            self._assert_binding(backup)
+        except BaseException:
+            self._cleanup_private_binding(backup)
+            raise
+        return backup
+
+    def _restore_previous(
+        self,
+        rollback: _CandidateBinding | None,
+        expected_receipt: IndexReceipt | None,
+    ) -> None:
+        parent_descriptor, filename, _, parent_path = open_confined_parent(
+            self._corpus_root,
+            self._published_path,
+            create=True,
+        )
+        restoration: _CandidateBinding | None = None
+        try:
+            assert_safe_directory_binding(parent_descriptor, parent_path)
+            if rollback is None:
+                try:
+                    os.unlink(filename, dir_fd=parent_descriptor)
+                except FileNotFoundError:
+                    pass
+                os.fsync(parent_descriptor)
+                return
+            restoration = self._copy_to_private_binding(
+                rollback.file_descriptor,
+                parent_descriptor,
+                parent_path,
+                purpose="restore",
+            )
+            if (
+                read_index_receipt(
+                    restoration.path,
+                    corpus_root=self._corpus_root,
+                )
+                != expected_receipt
+            ):
+                raise ValueError("restoration copy differs from previous published index")
+            self._assert_binding(restoration)
+            _REAL_OS_REPLACE(
+                restoration.filename,
+                filename,
+                src_dir_fd=restoration.parent_descriptor,
+                dst_dir_fd=restoration.parent_descriptor,
+            )
+            assert_safe_directory_binding(restoration.parent_descriptor, parent_path)
+            assert_safe_file_binding(
+                restoration.parent_descriptor,
+                filename,
+                restoration.file_descriptor,
+            )
+            os.fsync(restoration.parent_descriptor)
+            if (
+                read_index_receipt(
+                    self._published_path,
+                    corpus_root=self._corpus_root,
+                )
+                != expected_receipt
+            ):
+                raise ValueError("restored search index differs from rollback copy")
+        finally:
+            if restoration is not None:
+                self._cleanup_private_binding(restoration)
+            os.close(parent_descriptor)
 
     def _next_generation(self) -> int:
         if not safe_target_exists(self._corpus_root, self._published_path):
@@ -214,20 +383,23 @@ class SqliteFtsIndexBuilder:
             + 1
         )
 
-    def _assert_expected_published_generation(self, expected: int) -> None:
+    def _assert_expected_published_generation(self, expected: int) -> IndexReceipt | None:
         exists = safe_target_exists(self._corpus_root, self._published_path)
         if expected == 0:
             if exists:
                 raise ValueError("published search index generation changed")
-            return
+            return None
         if not exists:
             raise ValueError("published search index generation is missing")
         current = read_index_receipt(
             self._published_path,
             corpus_root=self._corpus_root,
-        ).generation
-        if current != expected:
-            raise ValueError(f"published search index generation is {current}, expected {expected}")
+        )
+        if current.generation != expected:
+            raise ValueError(
+                f"published search index generation is {current.generation}, expected {expected}"
+            )
+        return current
 
     def _create_candidate_binding(self) -> _CandidateBinding:
         parent_descriptor, _, _, parent_path = open_confined_parent(
@@ -257,6 +429,100 @@ class SqliteFtsIndexBuilder:
             return binding
         os.close(parent_descriptor)
         raise FileExistsError("could not allocate a private search index candidate")
+
+    def _copy_to_private_binding(
+        self,
+        source_descriptor: int,
+        parent_descriptor: int,
+        parent_path: Path,
+        *,
+        purpose: str,
+    ) -> _CandidateBinding:
+        owned_parent_descriptor = os.dup(parent_descriptor)
+        try:
+            assert_safe_directory_binding(owned_parent_descriptor, parent_path)
+            for _ in range(128):
+                filename = f".{self._published_name}.{purpose}-{secrets.token_hex(12)}.sqlite3"
+                try:
+                    file_descriptor = os.open(
+                        filename,
+                        _CREATE_FLAGS,
+                        0o600,
+                        dir_fd=owned_parent_descriptor,
+                    )
+                except FileExistsError:
+                    continue
+                private = _CandidateBinding(
+                    path=parent_path / filename,
+                    filename=filename,
+                    parent_path=parent_path,
+                    parent_descriptor=owned_parent_descriptor,
+                    file_descriptor=file_descriptor,
+                )
+                try:
+                    self._copy_descriptor(source_descriptor, file_descriptor)
+                    self._assert_binding(private)
+                    os.fsync(file_descriptor)
+                    if self._descriptor_sha256(source_descriptor) != self._descriptor_sha256(
+                        file_descriptor
+                    ):
+                        raise ValueError("private search index copy has a different binary digest")
+                except BaseException:
+                    self._cleanup_private_binding(private)
+                    owned_parent_descriptor = -1
+                    raise
+                return private
+        except BaseException:
+            if owned_parent_descriptor >= 0:
+                os.close(owned_parent_descriptor)
+            raise
+        os.close(owned_parent_descriptor)
+        raise FileExistsError("could not allocate a private search index copy")
+
+    @staticmethod
+    def _copy_descriptor(source_descriptor: int, destination_descriptor: int) -> None:
+        source_size = os.fstat(source_descriptor).st_size
+        offset = 0
+        while offset < source_size:
+            block = os.pread(source_descriptor, min(1024 * 1024, source_size - offset), offset)
+            if not block:
+                raise OSError("validated search index descriptor ended during copy")
+            written = 0
+            while written < len(block):
+                written += os.write(destination_descriptor, block[written:])
+            offset += len(block)
+        os.ftruncate(destination_descriptor, source_size)
+
+    @staticmethod
+    def _descriptor_sha256(descriptor: int) -> str:
+        digest = hashlib.sha256()
+        size = os.fstat(descriptor).st_size
+        offset = 0
+        while offset < size:
+            block = os.pread(descriptor, min(1024 * 1024, size - offset), offset)
+            if not block:
+                raise OSError("validated search index descriptor ended during hashing")
+            digest.update(block)
+            offset += len(block)
+        return digest.hexdigest()
+
+    @staticmethod
+    def _cleanup_private_binding(binding: _CandidateBinding) -> None:
+        try:
+            opened = os.fstat(binding.file_descriptor)
+            try:
+                current = os.stat(
+                    binding.filename,
+                    dir_fd=binding.parent_descriptor,
+                    follow_symlinks=False,
+                )
+            except FileNotFoundError:
+                return
+            if (opened.st_dev, opened.st_ino) == (current.st_dev, current.st_ino):
+                os.unlink(binding.filename, dir_fd=binding.parent_descriptor)
+        finally:
+            os.close(binding.file_descriptor)
+            os.close(binding.parent_descriptor)
 
     @staticmethod
     def _assert_binding(binding: _CandidateBinding) -> None:

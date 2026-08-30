@@ -9,6 +9,7 @@ from uuid import UUID
 
 import pytest
 
+import paper_insights.adapters.search.sqlite_fts.schema as schema_module
 from paper_insights.adapters.search.sqlite_fts.builder import SqliteFtsIndexBuilder
 from paper_insights.adapters.search.sqlite_fts.reader import SqliteFtsSearchReader
 from paper_insights.adapters.search.sqlite_fts.schema import open_readonly
@@ -196,6 +197,54 @@ def test_search_database_connection_is_read_only_and_query_only(tmp_path: Path) 
         assert connection.execute("PRAGMA query_only").fetchone()[0] == 1
         with pytest.raises(sqlite3.OperationalError, match="readonly"):
             connection.execute("CREATE TABLE forbidden (id INTEGER)")
+
+
+def test_reader_uses_validated_descriptor_during_connect_path_aba(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = _published_index(tmp_path)
+    original_bytes = path.read_bytes()
+    attacker_root = tmp_path / "attacker"
+    attacker_root.mkdir()
+    attacker_path = attacker_root / "search-v1.sqlite3"
+    attacker_request = IndexBuildRequest(
+        documents=(_document(4, "Injected biology", "This index must never be read."),),
+        catalog_revision=CatalogRevision(5),
+        chunk_schema_version="chunk-v1",
+    )
+    attacker_builder = SqliteFtsIndexBuilder(attacker_path, corpus_root=attacker_root)
+    attacker_candidate = attacker_builder.build_candidate(attacker_request)
+    attacker_builder.publish(attacker_candidate, _Lease(CatalogRevision(5)))
+    displaced = tmp_path / "validated.sqlite3"
+    real_connect = schema_module.sqlite3.connect
+    injected = False
+
+    def connect_during_path_aba(
+        database: str | bytes | Path,
+        *args: object,
+        **kwargs: object,
+    ) -> sqlite3.Connection:
+        nonlocal injected
+        if injected:
+            return real_connect(database, *args, **kwargs)  # type: ignore[arg-type]
+        injected = True
+        path.rename(displaced)
+        attacker_path.rename(path)
+        try:
+            return real_connect(database, *args, **kwargs)  # type: ignore[arg-type]
+        finally:
+            path.rename(attacker_path)
+            displaced.rename(path)
+
+    monkeypatch.setattr(schema_module.sqlite3, "connect", connect_during_path_aba)
+    reader = SqliteFtsSearchReader(path, _Catalog(5), corpus_root=tmp_path)
+
+    result = reader.search_papers(PaperSearchQuery(query="biology"))
+
+    assert injected is True
+    assert result.returned == 1
+    assert result.hits[0].title == "Protein structure"
+    assert path.read_bytes() == original_bytes
 
 
 def test_reader_rejects_an_index_with_an_unknown_self_described_schema(tmp_path: Path) -> None:
