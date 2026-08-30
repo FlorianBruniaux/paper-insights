@@ -1,6 +1,10 @@
+import pytest
 from test_identifier_resolution import SNAPSHOT_ID, make_citation_input
 
-from paper_insights.application.research.citations import SourceBackedCitationRenderer
+from paper_insights.application.research.citations import (
+    SourceBackedCitationRenderer,
+    UnsafeCitationValueError,
+)
 from paper_insights.domain.acquisition import IdentifierScope, ObservedAuthor, ObservedIdentifier
 from paper_insights.domain.corpus import CitationFormat, CitationWarning
 
@@ -36,7 +40,7 @@ def test_markdown_omits_missing_segments_without_orphan_punctuation() -> None:
         f"> Provenance: source `arxiv`; item `2608.01234`; snapshot `{SNAPSHOT_ID}`; "
         "record `1`; retrieved `2026-08-29T07:30:00Z`."
     )
-    assert result.missing_fields == ("author", "url", "year")
+    assert result.missing_fields == ("author", "year")
     assert result.warnings == (CitationWarning.MISSING_REQUIRED_FIELD,)
 
 
@@ -69,8 +73,58 @@ def test_markdown_escapes_html_uses_dynamic_code_spans_and_rejects_non_https_url
     ) in result.content
     assert "Source:" not in result.content
     assert "http://" not in result.content
-    assert result.missing_fields == ("url",)
-    assert result.warnings == (
-        CitationWarning.LITERAL_AUTHOR,
-        CitationWarning.MISSING_REQUIRED_FIELD,
+    assert result.missing_fields == ()
+    assert result.warnings == (CitationWarning.LITERAL_AUTHOR,)
+
+
+def test_markdown_neutralizes_block_markers_controls_and_unicode_formatting() -> None:
+    result = SourceBackedCitationRenderer().render(
+        make_citation_input(
+            title="<b>Title\x7f\u202e</b>",
+            authors=(
+                ObservedAuthor(
+                    raw_name=(
+                        "    # heading\n> quote\r\n- item\n1. item\n```fence\n---\n    code\u202e"
+                    )
+                ),
+            ),
+        ),
+        CitationFormat.MARKDOWN,
     )
+
+    assert result.content.startswith(
+        "&#32;&#32;&#32;&#32;\\# heading\\\\u000A&gt; quote\\\\u000D"
+        "\\\\u000A\\- item\\\\u000A1\\. item\\\\u000A"
+        "\\`\\`\\`fence\\\\u000A\\-\\-\\-\\\\u000A    code\\\\u202E. "
+        "**&lt;b&gt;Title\\\\u007F\\\\u202E&lt;/b&gt;**."
+    )
+    assert result.content.count("\n") == 2
+    assert "\r" not in result.content
+    assert "\x7f" not in result.content
+    assert "\u202e" not in result.content
+
+
+@pytest.mark.parametrize(
+    "source_url",
+    (
+        "https://example.test/path\x7fhidden",
+        "https://example.test/path\u202eevil",
+    ),
+)
+def test_markdown_omits_urls_containing_unicode_controls_or_formatting(
+    source_url: str,
+) -> None:
+    result = SourceBackedCitationRenderer().render(
+        make_citation_input(source_url=source_url), CitationFormat.MARKDOWN
+    )
+
+    assert "Source:" not in result.content
+    assert result.missing_fields == ()
+    assert result.warnings == (CitationWarning.LITERAL_AUTHOR,)
+
+
+def test_markdown_rejects_provenance_identifiers_with_line_endings() -> None:
+    citation = make_citation_input(source_item_id="item\nidentifier")
+
+    with pytest.raises(UnsafeCitationValueError, match="unsafe control or formatting"):
+        SourceBackedCitationRenderer().render(citation, CitationFormat.MARKDOWN)

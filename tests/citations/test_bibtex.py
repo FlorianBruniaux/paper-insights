@@ -64,3 +64,64 @@ def test_bibtex_keys_do_not_collide_when_exact_identifiers_have_different_separa
     assert slash.content.startswith("@misc{paperinsights_61727869763a782f79,")
     assert underscore.content.startswith("@misc{paperinsights_61727869763a785f79,")
     assert slash.content.splitlines()[0] != underscore.content.splitlines()[0]
+
+
+def test_bibtex_groups_special_structured_name_parts_as_exact_authors() -> None:
+    result = SourceBackedCitationRenderer().render(
+        make_citation_input(
+            authors=(
+                ObservedAuthor(
+                    raw_name="Ada Research and Development",
+                    given_name="Ada",
+                    family_name="Research and Development",
+                ),
+                ObservedAuthor(
+                    raw_name="Alice and Eve Lovelace",
+                    given_name="Alice and Eve",
+                    family_name="Lovelace",
+                ),
+                ObservedAuthor(
+                    raw_name="Ada #1 Family, Incorporated",
+                    given_name="Ada #1",
+                    family_name="Family, Incorporated",
+                ),
+                ObservedAuthor(raw_name="Tools and Systems"),
+            )
+        ),
+        CitationFormat.BIBTEX,
+    )
+
+    author_value = _bibtex_author_value(result.content)
+    assert author_value == (
+        "{Research and Development}, Ada and "
+        "Lovelace, {Alice and Eve} and "
+        "{Family, Incorporated}, {Ada \\#1} and "
+        "{Tools and Systems}"
+    )
+    assert _top_level_author_separators(author_value) == 3
+
+
+def _bibtex_author_value(content: str) -> str:
+    line = next(line for line in content.splitlines() if line.startswith("  author ="))
+    return line.removeprefix("  author = {").removesuffix("},")
+
+
+def _top_level_author_separators(value: str) -> int:
+    depth = 0
+    separators = 0
+    index = 0
+    while index < len(value):
+        character = value[index]
+        if character == "\\":
+            index += 2
+            continue
+        if character == "{":
+            depth += 1
+        elif character == "}":
+            depth -= 1
+        elif depth == 0 and value.startswith(" and ", index):
+            separators += 1
+            index += len(" and ")
+            continue
+        index += 1
+    return separators

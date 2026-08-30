@@ -3,6 +3,7 @@ from __future__ import annotations
 import html
 import json
 import re
+import unicodedata
 from urllib.parse import urlsplit
 
 from paper_insights.application.ports.catalog import CatalogReader
@@ -30,6 +31,8 @@ _BIBTEX_ESCAPES = {
     "}": r"\}",
     "~": r"\textasciitilde{}",
 }
+_BIBTEX_AND = re.compile(r"(?:^|\s)and(?:\s|$)", re.IGNORECASE)
+_BIBTEX_NAME_SYNTAX = re.compile(r"[,{}\\#$%&_~^]")
 
 
 class CitationNotFoundError(LookupError):
@@ -40,6 +43,11 @@ class CitationNotFoundError(LookupError):
 class AmbiguousCitationMetadataError(ValueError):
     def __init__(self) -> None:
         super().__init__("observed DOI is ambiguous")
+
+
+class UnsafeCitationValueError(ValueError):
+    def __init__(self) -> None:
+        super().__init__("citation value contains unsafe control or formatting characters")
 
 
 class CitationService:
@@ -134,8 +142,6 @@ class SourceBackedCitationRenderer:
         source_url = _validated_https_url(observed.source_url)
         if source_url is not None:
             segments.append(f"Source: <{source_url}>")
-        else:
-            missing.append("url")
         reference = ". ".join(segments) + "."
         provenance = (
             f"> Provenance: source {_code_span(str(citation.source_id))}; "
@@ -213,18 +219,43 @@ def _escape_bibtex(value: str) -> str:
 
 def _bibtex_author(author: ObservedAuthor) -> str:
     if author.given_name and author.family_name:
-        return f"{_escape_bibtex(author.family_name)}, {_escape_bibtex(author.given_name)}"
+        family_name = _bibtex_name_part(author.family_name)
+        given_name = _bibtex_name_part(author.given_name)
+        return f"{family_name}, {given_name}"
     return "{" + _escape_bibtex(author.raw_name) + "}"
 
 
+def _bibtex_name_part(value: str) -> str:
+    escaped = _escape_bibtex(value)
+    if _BIBTEX_AND.search(value) or _BIBTEX_NAME_SYNTAX.search(value):
+        return "{" + escaped + "}"
+    return escaped
+
+
 def _escape_markdown(value: str) -> str:
-    escaped_html = html.escape(value, quote=False)
-    return "".join(
-        f"\\{character}" if character in r"\`*_[]" else character for character in escaped_html
+    visible = "".join(_visible_control(character) for character in value)
+    escaped_html = html.escape(visible, quote=False)
+    leading_spaces = len(escaped_html) - len(escaped_html.lstrip(" "))
+    safe_leading_spaces = "&#32;" * leading_spaces
+    escaped_text = "".join(
+        f"\\{character}" if character in r"\`*_[]#>+-.)!(~|" else character
+        for character in escaped_html[leading_spaces:]
     )
+    return safe_leading_spaces + escaped_text
+
+
+def _visible_control(character: str) -> str:
+    if unicodedata.category(character) not in {"Cc", "Cf"}:
+        return character
+    codepoint = ord(character)
+    if codepoint <= 0xFFFF:
+        return f"\\u{codepoint:04X}"
+    return f"\\U{codepoint:08X}"
 
 
 def _code_span(value: str) -> str:
+    if any(unicodedata.category(character) in {"Cc", "Cf"} for character in value):
+        raise UnsafeCitationValueError
     longest_run = max((len(run) for run in re.findall(r"`+", value)), default=0)
     delimiter = "`" * (longest_run + 1)
     needs_padding = (
@@ -237,7 +268,10 @@ def _code_span(value: str) -> str:
 
 
 def _validated_https_url(value: str | None) -> str | None:
-    if value is None or any(character.isspace() or ord(character) < 32 for character in value):
+    if value is None or any(
+        character.isspace() or unicodedata.category(character) in {"Cc", "Cf"}
+        for character in value
+    ):
         return None
     if any(character in value for character in '<>"`\\'):
         return None
