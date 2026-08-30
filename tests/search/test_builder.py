@@ -391,10 +391,59 @@ def test_late_parent_rename_restores_previous_index_at_canonical_path(
     assert published_path.is_symlink() is False
     assert published_path.read_bytes() == previous_bytes
     assert read_index_receipt(published_path, corpus_root=tmp_path).generation == 1
-    assert not (displaced_parent / published_path.name).exists()
+    displaced_publication = displaced_parent / published_path.name
+    assert displaced_publication.exists()
+    assert (
+        read_index_receipt(
+            displaced_publication,
+            corpus_root=tmp_path,
+        ).generation
+        == 2
+    )
     builder.discard(candidate)
-    assert not (displaced_parent / published_path.name).exists()
+    assert displaced_publication.exists()
     assert tuple(tmp_path.rglob(f".{published_path.name}.*-*.sqlite3")) == ()
+
+
+def test_parent_rename_cleanup_never_unlinks_a_late_third_party_inode(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    published_path = tmp_path / "search" / "search-v1.sqlite3"
+    builder = SqliteFtsIndexBuilder(published_path, corpus_root=tmp_path)
+    initial = builder.build_candidate(_request(1, title="Stable published evidence"))
+    builder.publish(initial, _Lease(CatalogRevision(1)))
+    previous_bytes = published_path.read_bytes()
+    candidate = builder.build_candidate(_request(2, title="Replacement evidence"))
+    displaced_parent = tmp_path / "displaced-search"
+    third_party_bytes = b"third-party inode must remain untouched"
+    real_replace = builder_module.os.replace
+
+    def replace_displaced_publication_with_third_party(
+        source: Path | str,
+        destination: Path | str,
+        **options: object,
+    ) -> None:
+        published_path.parent.rename(displaced_parent)
+        published_path.parent.mkdir()
+        real_replace(source, destination, **options)  # type: ignore[arg-type]
+        displaced_publication = displaced_parent / published_path.name
+        displaced_publication.unlink()
+        displaced_publication.write_bytes(third_party_bytes)
+
+    monkeypatch.setattr(
+        builder_module.os,
+        "replace",
+        replace_displaced_publication_with_third_party,
+    )
+
+    with pytest.raises(ValueError, match="parent binding changed") as caught:
+        builder.publish(candidate, _Lease(CatalogRevision(2)))
+
+    assert any("cleanup unavailable" in note for note in caught.value.__notes__)
+    assert (displaced_parent / published_path.name).read_bytes() == third_party_bytes
+    assert published_path.read_bytes() == previous_bytes
+    builder.discard(candidate)
+    assert (displaced_parent / published_path.name).read_bytes() == third_party_bytes
 
 
 def test_concurrent_candidates_with_same_next_generation_cannot_both_publish(
