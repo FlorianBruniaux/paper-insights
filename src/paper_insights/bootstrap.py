@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import secrets
+import sqlite3
 import stat
 import time
 from collections.abc import Callable, Iterator, Mapping, Sequence
@@ -11,6 +12,7 @@ from uuid import UUID
 
 import httpx
 from sqlalchemy import Engine
+from sqlalchemy.exc import SQLAlchemyError
 
 from paper_insights.adapters.artifacts.filesystem.store import FilesystemBlobStore
 from paper_insights.adapters.catalog.sqlite.engine import create_catalog_engine
@@ -139,74 +141,87 @@ def _catalog_runtime(
 
 
 @contextmanager
+def _closed_database_errors() -> Iterator[None]:
+    try:
+        yield
+    except (SQLAlchemyError, sqlite3.DatabaseError) as exc:
+        raise CorpusUnavailableError("corpus database is unavailable") from exc
+
+
+@contextmanager
 def ingestion_service(
     settings: Settings,
     *,
     clock: Clock | None = None,
     ids: IdGenerator | None = None,
 ) -> Iterator[ExecutePreparedIngestion]:
-    engine, active_clock, active_ids, _reader, unit_of_work = _catalog_runtime(
-        settings, clock=clock, ids=ids
-    )
-    try:
-        yield ExecutePreparedIngestion(
-            blobs=FilesystemBlobStore(settings.paths),
-            catalog=unit_of_work,
-            clock=active_clock,
-            ids=active_ids,
-            metadata_payload=normalized_metadata_payload,
+    with _closed_database_errors():
+        engine, active_clock, active_ids, _reader, unit_of_work = _catalog_runtime(
+            settings, clock=clock, ids=ids
         )
-    finally:
-        engine.dispose()
+        try:
+            yield ExecutePreparedIngestion(
+                blobs=FilesystemBlobStore(settings.paths),
+                catalog=unit_of_work,
+                clock=active_clock,
+                ids=active_ids,
+                metadata_payload=normalized_metadata_payload,
+            )
+        finally:
+            engine.dispose()
 
 
 @contextmanager
 def collections_service(settings: Settings) -> Iterator[CollectionService]:
-    engine, _clock, _ids, reader, unit_of_work = _catalog_runtime(settings)
-    try:
-        yield CollectionService(unit_of_work, reader)
-    finally:
-        engine.dispose()
+    with _closed_database_errors():
+        engine, _clock, _ids, reader, unit_of_work = _catalog_runtime(settings)
+        try:
+            yield CollectionService(unit_of_work, reader)
+        finally:
+            engine.dispose()
 
 
 @contextmanager
 def search_service(settings: Settings) -> Iterator[LocalSearch]:
-    engine, _clock, _ids, reader, _unit = _catalog_runtime(settings)
-    try:
-        yield LocalSearch(
-            SqliteFtsSearchReader(
-                settings.paths.search_index,
-                reader,
-                corpus_root=settings.paths.data_root,
+    with _closed_database_errors():
+        engine, _clock, _ids, reader, _unit = _catalog_runtime(settings)
+        try:
+            yield LocalSearch(
+                SqliteFtsSearchReader(
+                    settings.paths.search_index,
+                    reader,
+                    corpus_root=settings.paths.data_root,
+                )
             )
-        )
-    finally:
-        engine.dispose()
+        finally:
+            engine.dispose()
 
 
 @contextmanager
 def index_service(settings: Settings) -> Iterator[RebuildSearchIndex]:
-    engine, _clock, _ids, reader, _unit = _catalog_runtime(settings)
-    try:
-        yield RebuildSearchIndex(
-            catalog=reader,
-            builder=SqliteFtsIndexBuilder(
-                settings.paths.search_index,
-                corpus_root=settings.paths.data_root,
-            ),
-            revision_guard=SqliteCatalogRevisionGuard(engine),
-        )
-    finally:
-        engine.dispose()
+    with _closed_database_errors():
+        engine, _clock, _ids, reader, _unit = _catalog_runtime(settings)
+        try:
+            yield RebuildSearchIndex(
+                catalog=reader,
+                builder=SqliteFtsIndexBuilder(
+                    settings.paths.search_index,
+                    corpus_root=settings.paths.data_root,
+                ),
+                revision_guard=SqliteCatalogRevisionGuard(engine),
+            )
+        finally:
+            engine.dispose()
 
 
 @contextmanager
 def citation_service(settings: Settings) -> Iterator[CitationService]:
-    engine, _clock, _ids, reader, _unit = _catalog_runtime(settings)
-    try:
-        yield CitationService(reader, SourceBackedCitationRenderer())
-    finally:
-        engine.dispose()
+    with _closed_database_errors():
+        engine, _clock, _ids, reader, _unit = _catalog_runtime(settings)
+        try:
+            yield CitationService(reader, SourceBackedCitationRenderer())
+        finally:
+            engine.dispose()
 
 
 @contextmanager
@@ -214,16 +229,17 @@ def repair_service(
     settings: Settings,
     stale_after_seconds: int,
 ) -> Iterator[RepairInterruptedRuns]:
-    engine, clock, _ids, reader, unit_of_work = _catalog_runtime(settings)
-    try:
-        yield RepairInterruptedRuns(
-            reader=reader,
-            catalog=unit_of_work,
-            clock=clock,
-            stale_after=timedelta(seconds=stale_after_seconds),
-        )
-    finally:
-        engine.dispose()
+    with _closed_database_errors():
+        engine, clock, _ids, reader, unit_of_work = _catalog_runtime(settings)
+        try:
+            yield RepairInterruptedRuns(
+                reader=reader,
+                catalog=unit_of_work,
+                clock=clock,
+                stale_after=timedelta(seconds=stale_after_seconds),
+            )
+        finally:
+            engine.dispose()
 
 
 def main(

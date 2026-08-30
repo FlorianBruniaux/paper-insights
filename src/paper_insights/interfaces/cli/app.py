@@ -3,14 +3,11 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import sqlite3
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import AbstractContextManager
 from pathlib import Path
 from typing import TextIO
-
-from sqlalchemy.exc import SQLAlchemyError
 
 from paper_insights.application.diagnostics import DoctorService
 from paper_insights.application.ingestion.execute import ExecutePreparedIngestion
@@ -365,7 +362,7 @@ def run(
                     human=f"repair: {len(results)} result(s)\n",
                 )
                 return int(ExitCode.SUCCESS)
-    except (CorpusUnavailableError, SQLAlchemyError, sqlite3.DatabaseError):
+    except CorpusUnavailableError:
         _write_error(error_output, "corpus_unavailable")
         return int(ExitCode.CORPUS_INVALID)
     except (LookupError, OSError, RuntimeError, ValueError) as exc:
