@@ -107,6 +107,29 @@ def passage_result_data(result: PassageSearchResult) -> dict[str, object]:
     }
 
 
+def render_passage_result(result: PassageSearchResult) -> str:
+    available = "unknown" if result.available is None else str(result.available)
+    lines = [
+        "search.passages | "
+        f"catalog_revision={result.catalog_revision.value} | "
+        f"index_revision={result.index_revision.value} | "
+        f"coverage={result.coverage.value} | returned={result.returned} | "
+        f"available={available} | truncated={str(result.truncated).lower()} | "
+        f"applied_limit={result.applied_limit}"
+    ]
+    for hit in result.hits:
+        lines.append(
+            f"{hit.rank}. passage_id={hit.passage.passage_id} | "
+            f"paper_id={hit.passage.paper_id} | "
+            f"paper_version_id={hit.passage.identity.paper_version_id} | "
+            f"version_observation_id={hit.passage.version_observation_id} | "
+            f"rank={hit.rank} | bm25_score={hit.bm25_score} | "
+            f"excerpt={hit.excerpt} | section={hit.passage.identity.section} | "
+            f"ordinal={hit.passage.identity.ordinal}"
+        )
+    return "\n".join(lines) + "\n"
+
+
 def _filters(arguments: argparse.Namespace) -> SearchFilters:
     return SearchFilters(
         source_id=SourceId(arguments.source) if arguments.source else None,

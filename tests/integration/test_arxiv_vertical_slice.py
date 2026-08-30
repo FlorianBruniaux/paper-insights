@@ -202,10 +202,32 @@ def test_search_rejects_out_of_range_limit_before_factory(tmp_path: Path, limit:
 
 
 def test_cli_envelope_forbids_extra_fields_and_unknown_operations() -> None:
+    preview = {
+        "schema_version": "discovery-preview-v1",
+        "source_id": "arxiv",
+        "query": {
+            "authors": [],
+            "categories": [],
+            "cursor": None,
+            "date_from": None,
+            "date_to": None,
+            "identifiers": [],
+            "limit": 1,
+            "text": "agents",
+        },
+        "requested_records": 1,
+        "discovered_records": 0,
+        "selected_records": 0,
+        "selected_locators": [],
+        "issues": [],
+        "prepared_at": "2026-08-30T10:00:00Z",
+        "expires_at": "2026-08-30T10:15:00Z",
+        "digest": "a" * 64,
+    }
     valid = {
         "schema_version": "paper-insights.cli.v1",
         "operation": "discover",
-        "data": {"preview": {}, "records": []},
+        "data": {"preview": preview, "records": []},
         "coverage": {"status": "complete"},
         "errors": [],
         "truncated": False,
@@ -217,10 +239,20 @@ def test_cli_envelope_forbids_extra_fields_and_unknown_operations() -> None:
     with pytest.raises(ValidationError):
         CliEnvelope.model_validate({**valid, "unexpected": True})
     with pytest.raises(ValidationError):
-        CliEnvelope.model_validate({**valid, "data": {"preview": {}, "records": [], "x": 1}})
+        CliEnvelope.model_validate({**valid, "data": {"preview": preview, "records": [], "x": 1}})
     with pytest.raises(ValidationError):
         CliEnvelope.model_validate(
             {**valid, "data": {"preview": {"path": Path("x")}, "records": []}}
+        )
+    with pytest.raises(ValidationError):
+        CliEnvelope.model_validate({**valid, "data": {"preview": 1, "records": "wrong"}})
+    with pytest.raises(ValidationError):
+        CliEnvelope.model_validate(
+            {
+                **valid,
+                "operation": "ingest",
+                "data": {"run_id": False, "counters": "wrong"},
+            }
         )
     with pytest.raises(ValidationError):
         CliErrorEnvelope.model_validate(
@@ -231,7 +263,18 @@ def test_cli_envelope_forbids_extra_fields_and_unknown_operations() -> None:
         {
             **valid,
             "operation": "ingest",
-            "data": {"run_id": "run", "counters": {}},
+            "data": {
+                "run_id": "run",
+                "counters": {
+                    "selected_records": 1,
+                    "new_papers": 0,
+                    "new_versions": 0,
+                    "metadata_updates": 0,
+                    "unchanged_records": 0,
+                    "failed_records": 1,
+                    "status": "failed",
+                },
+            },
             "errors": [{"code": "ingestion_items_failed", "count": 1}],
         }
     )
@@ -394,6 +437,37 @@ def test_offline_arxiv_cli_preserves_versions_and_provenance(tmp_path: Path) -> 
     assert (
         f"truncated={str(refreshed_search['truncated']).lower()}" in terminal_search["text"]  # type: ignore[operator]
     )
+
+    passage_code, passage_json, passage_error = invoke(
+        ["search", "passages", "provenance", "--limit", "5", "--json"]
+    )
+    passage_terminal_code, passage_terminal, passage_terminal_error = invoke(
+        ["search", "passages", "provenance", "--limit", "5"]
+    )
+    assert (passage_code, passage_terminal_code) == (0, 0)
+    assert passage_error == passage_terminal_error == ""
+    assert passage_json["returned"] == 1
+    passage_hit = passage_json["data"]["hits"][0]  # type: ignore[index]
+    rendered_passages = passage_terminal["text"]
+    assert f"catalog_revision={passage_json['data']['catalog_revision']}" in rendered_passages  # type: ignore[index,operator]
+    assert f"index_revision={passage_json['data']['index_revision']}" in rendered_passages  # type: ignore[index,operator]
+    assert f"coverage={passage_json['coverage']['status']}" in rendered_passages  # type: ignore[index,operator]
+    assert f"returned={passage_json['returned']}" in rendered_passages  # type: ignore[operator]
+    assert f"available={passage_json['available']}" in rendered_passages  # type: ignore[operator]
+    assert f"truncated={str(passage_json['truncated']).lower()}" in rendered_passages  # type: ignore[operator]
+    assert f"applied_limit={passage_json['data']['applied_limit']}" in rendered_passages  # type: ignore[index,operator]
+    for field in (
+        "passage_id",
+        "paper_id",
+        "paper_version_id",
+        "version_observation_id",
+        "rank",
+        "bm25_score",
+        "excerpt",
+        "section",
+        "ordinal",
+    ):
+        assert f"{field}={passage_hit[field]}" in rendered_passages  # type: ignore[index,operator]
 
     with closing(sqlite3.connect(data_root / "catalog.sqlite3")) as connection:
         paper_count = connection.execute("SELECT count(*) FROM papers").fetchone()[0]
