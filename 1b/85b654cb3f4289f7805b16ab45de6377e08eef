@@ -1,0 +1,28 @@
+tests/catalog/test_snapshot.py
+  s_2f2b8a177ba283::t_16b2ad3b610e03 554-567
+  s_e6f3f9b3ebc509::t_3a9f4f56b9519f 568-569
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "1b85b654cb3f4289f7805b16ab45de6377e08eef",
+  "prompts": {},
+  "sessions": {
+    "s_2f2b8a177ba283": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a04a7c-f938-7500-b20e-0faa6c4019c5",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Florian BRUNIAUX <florian@bruniaux.com>"
+    },
+    "s_e6f3f9b3ebc509": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a052bb-231b-7360-b4fd-17b0ba68c8a5",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Florian BRUNIAUX <florian@bruniaux.com>"
+    }
+  }
+}
