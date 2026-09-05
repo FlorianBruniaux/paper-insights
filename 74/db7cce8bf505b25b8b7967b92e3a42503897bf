@@ -1,0 +1,56 @@
+docs/evidence/DATA-FLOWS.md
+  s_9b6f8b9432e2d7::t_d49ea554996f02 1-44
+docs/evidence/RISK-REGISTER.md
+  s_9b6f8b9432e2d7::t_d49ea554996f02 1-35
+scripts/check_evidence_governance.py
+  s_9b6f8b9432e2d7::t_d49ea554996f02 1-185
+docs/ROADMAP.md
+  s_9b6f8b9432e2d7::t_984ffef9e5401d 18-31
+tests/governance/test_capability_matrix.py
+  s_9b6f8b9432e2d7::t_1b3fdfaefe2a04 1-3,5-10,12-40,60-62,69-70,74-82,84,87,89-93,95,102,104-112,114,120,122-131,133,138,140-149,158-161,163-171
+  s_9b6f8b9432e2d7::t_5b77253c75a7da 11,41-59,63-68,71-73,83,85-86,88,94,96-101,103,113,115-119,121,132,134-137,139,150-157,162
+  s_9b6f8b9432e2d7::t_3f5ee354bb224d 4,172-202
+docs/superpowers/specs/2026-09-05-evidence-governance-design.md
+  s_9b6f8b9432e2d7::t_9fff034729ef07 1-133
+scripts/validate_project.py
+  s_9b6f8b9432e2d7::t_ac2d77c304fb84 11-12,29,35-36
+  s_9b6f8b9432e2d7::t_06bbbf4312bee7 77-87,140
+docs/superpowers/plans/2026-09-05-evidence-governance-optimization.md
+  s_9b6f8b9432e2d7::t_dd188555b3e273 193
+  s_9b6f8b9432e2d7::t_9fff034729ef07 1-192,194-314,316-317
+  s_9b6f8b9432e2d7::t_ed101c87a3d5bc 315
+docs/evidence/capability-matrix.json
+  s_9b6f8b9432e2d7::t_22ff319b4e43e8 1-160
+README.md
+  s_9b6f8b9432e2d7::t_b163a5cabfca7a 7-9,55-56
+CHANGELOG.md
+  s_9b6f8b9432e2d7::t_8ec9057a2d8c1e 9-11,38-39
+  s_9b6f8b9432e2d7::t_d49ea554996f02 12
+scripts/check_capability_matrix.py
+  s_9b6f8b9432e2d7::t_8bd4ea9c42c773 217-220
+  s_9b6f8b9432e2d7::t_22ff319b4e43e8 1-58,61-216,221-253
+  s_9b6f8b9432e2d7::t_b38ae8386b3357 59-60
+  s_9b6f8b9432e2d7::t_34f0dfaf0031aa 254
+docs/superpowers/plans/2026-08-28-complete-program-execution.md
+  s_9b6f8b9432e2d7::t_faee8a7d9b352a 13-14
+tests/governance/test_evidence_governance.py
+  s_9b6f8b9432e2d7::t_dd188555b3e273 1-112
+pyproject.toml
+  s_9b6f8b9432e2d7::t_b38ae8386b3357 61
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "74db7cce8bf505b25b8b7967b92e3a42503897bf",
+  "prompts": {},
+  "sessions": {
+    "s_9b6f8b9432e2d7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0718e-c1ee-76c0-aa84-40289c874c7f",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Florian BRUNIAUX <florian@bruniaux.com>"
+    }
+  }
+}
