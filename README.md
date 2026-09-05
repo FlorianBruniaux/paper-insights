@@ -4,7 +4,9 @@ Paper Insights sera un corpus local de publications scientifiques pour la recher
 
 ## État du projet
 
-Le dépôt contient le socle documentaire et la configuration des agents. L'ingestion, la recherche et le serveur MCP ne sont pas encore implémentés. Les commandes décrites dans les specs sont des contrats cibles, pas des fonctionnalités disponibles.
+La branche d'intégration `codex/complete-program-execution` contient les contrats Gate 0, la fondation locale Gate 1, l'ingestion arXiv préparée, la recherche FTS5, les collections, les citations et leur CLI Gate 2. Ces comportements passent sur fixtures locales et sans réseau.
+
+Gate 2 reste bloqué par la revue humaine de pertinence, actuellement à 0 sur 30. Le serveur MCP, les watchlists, l'acquisition de texte intégral, l'analyse LLM, l'identité enrichie et la fédération restent des contrats cibles. Le projet n'est pas présenté comme prêt à publier ou vérifié contre un corpus réel.
 
 ## Objectifs
 
@@ -50,6 +52,8 @@ Cette vue simplifiée montre la direction des dépendances, pas un pipeline d'im
 | [Ports d'application](docs/specs/PORTS.md) | Signatures synchrones et DTO gelés |
 | [Recherche et MCP](docs/specs/SEARCH-AND-MCP.md) | FTS5, citations et outils MCP |
 | [Revue humaine de pertinence](docs/benchmarks/SEARCH-RELEVANCE-GATE.md) | Protocole hors réseau du Gate 2 |
+| [Matrice de capacité et de preuve](docs/evidence/capability-matrix.json) | État vérifiable, exclusions, plafond de claim et prochaine évaluation |
+| [Optimisation de la gouvernance de preuve](docs/superpowers/plans/2026-09-05-evidence-governance-optimization.md) | Extension transversale du plan complet |
 | [Watchlists](docs/specs/WATCHLISTS.md) | Curseurs, overlap, finalisation et digests |
 | [Analyse](docs/specs/ANALYSIS.md) | Texte intégral, passages, cache, claims et preuves |
 | [Identité des auteurs](docs/specs/AUTHOR-IDENTITY.md) | Observations, décisions réversibles et LinkedIn manuel |

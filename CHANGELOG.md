@@ -6,6 +6,10 @@ Toutes les modifications notables du projet sont consignées ici.
 
 ### Added
 
+- Design and implementation plan for cross-cutting evidence governance without changing the existing work-package order.
+- Machine-readable capability matrix with deterministic, behavioral and human evidence states, bounded claims and next evaluations.
+- Dependency-free capability-matrix validator with fail-closed tests for invalid statuses, missing evidence, denominators and unjustified operational claims.
+- Risk register and checked data-flow inventory tied to the capability matrix and direct network imports.
 - Socle documentaire du projet Paper Insights.
 - Specs initiales pour le produit, le modèle de données, l'ingestion, la recherche et le MCP.
 - Configuration locale pour Claude Code et les agents compatibles.
@@ -31,6 +35,8 @@ Toutes les modifications notables du projet sont consignées ici.
 
 ### Changed
 
+- Project validation now consumes the capability matrix, and README distinguishes the implemented Gate 2 integration surface from the blocked human relevance gate and unopened later waves.
+- The roadmap and complete execution plan now reference the evidence-governance overlay as a cross-cutting control rather than a competing plan.
 - Le contrat `search-relevance-v1` distingue désormais les états `blank`, `prepared`, `executed` et `reviewed`; seule une revue complète compte pour le Gate 2.
 - The arXiv adapter scopes DOI identifiers to the paper while retaining each DOI observation on its exact version, allowing multiple arXiv revisions to share the same DOI without a catalog conflict.
 - Paper search hits now carry their source, ordered authors and scoped canonical identifiers directly from the fingerprinted `fts-v2` projection.

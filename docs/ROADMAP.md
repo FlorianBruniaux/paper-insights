@@ -15,6 +15,20 @@ La roadmap avance par tranches utilisables. Une phase ne se termine pas parce qu
 
 Les termes `P1`, phase, wave et gate ne sont pas interchangeables. P1 désigne uniquement le premier périmètre d'un contrat dans une spec.
 
+## Gouvernance transversale des preuves
+
+La roadmap conserve une source machine-readable dans `docs/evidence/capability-matrix.json`. Chaque capacité distingue spécification, implémentation, preuve déterministe, mesure comportementale et revue humaine. Son `claim_ceiling` borne ce que le projet peut annoncer; un statut `not_run`, `blocked`, `mixed` ou `UNKNOWN` ne peut pas être résumé comme un succès.
+
+Le plan complémentaire `docs/superpowers/plans/2026-09-05-evidence-governance-optimization.md` ajoute les contrôles transversaux. Il ne remplace pas le plan complet et n'ouvre aucune wave dont la gate précédente reste bloquée.
+
+Critères permanents:
+
+- toute preuve positive référence un artefact versionné présent dans le dépôt;
+- toute mesure nomme sa population, son dénominateur et ses exclusions;
+- le registre de risques ne peut pas promouvoir un statut indépendamment de la matrice;
+- les flux réseau et stockages durables sont inventoriés avant activation;
+- chaque gate met à jour son plafond de claim depuis des preuves fraîches.
+
 ## Gate 0: contrats
 
 Livrables:

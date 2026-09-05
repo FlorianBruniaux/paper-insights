@@ -1,0 +1,160 @@
+{
+  "schema_version": "capability-matrix-v1",
+  "capabilities": [
+    {
+      "id": "gate0.contracts",
+      "roadmap_gate": "gate0",
+      "mechanism_status": "implemented",
+      "deterministic_evidence": {
+        "status": "passed",
+        "references": [
+          "docs/specs/PORTS.md",
+          "tests/architecture/test_import_boundaries.py",
+          "tests/domain/test_contract_shapes.py"
+        ]
+      },
+      "behavioral_evidence": {
+        "status": "not_run",
+        "references": []
+      },
+      "human_evidence": {
+        "status": "not_run",
+        "references": []
+      },
+      "known_exclusions": [
+        "Contract and import checks do not prove a usable runtime or external integration."
+      ],
+      "claim_ceiling": "The versioned domain and application contracts pass their repository checks.",
+      "next_evaluation": "Re-run architecture and domain checks after every public contract change."
+    },
+    {
+      "id": "gate1.foundation",
+      "roadmap_gate": "gate1",
+      "mechanism_status": "implemented",
+      "deterministic_evidence": {
+        "status": "passed",
+        "references": [
+          "tests/artifacts/test_store.py",
+          "tests/catalog",
+          "tests/cli/test_doctor.py",
+          "tests/providers"
+        ]
+      },
+      "behavioral_evidence": {
+        "status": "not_run",
+        "references": []
+      },
+      "human_evidence": {
+        "status": "not_run",
+        "references": []
+      },
+      "known_exclusions": [
+        "Offline fixtures do not establish live arXiv availability, performance or full corpus recovery."
+      ],
+      "claim_ceiling": "The catalogue, bounded arXiv adapter, blob store and doctor pass offline deterministic tests.",
+      "next_evaluation": "Run a separately approved live provider smoke test against a disposable data root."
+    },
+    {
+      "id": "gate2.local-retrieval",
+      "roadmap_gate": "gate2",
+      "mechanism_status": "implemented",
+      "deterministic_evidence": {
+        "status": "passed",
+        "references": [
+          "docs/benchmarks/SEARCH-RELEVANCE-GATE.md",
+          "tests/benchmarks/test_search_relevance_harness.py",
+          "tests/citations",
+          "tests/ingestion",
+          "tests/search"
+        ]
+      },
+      "behavioral_evidence": {
+        "status": "not_run",
+        "references": []
+      },
+      "human_evidence": {
+        "status": "blocked",
+        "denominator": {
+          "observed": 0,
+          "total": 30
+        },
+        "references": [
+          "docs/benchmarks/SEARCH-RELEVANCE-GATE.md",
+          "tests/benchmarks/search_queries.jsonl"
+        ]
+      },
+      "known_exclusions": [
+        "The human relevance gate is 0 of 30 and no representative reference corpus has been approved.",
+        "Passing fixture searches do not establish relevance on the intended corpus."
+      ],
+      "claim_ceiling": "Prepared ingestion, local FTS5 search, citations and the relevance harness pass offline tests; search relevance remains unvalidated by humans.",
+      "next_evaluation": "Record the three Gate 2 product decisions and complete all 30 human reviews."
+    },
+    {
+      "id": "gate3.mcp-monitoring-fulltext",
+      "roadmap_gate": "gate3",
+      "mechanism_status": "specified",
+      "deterministic_evidence": {
+        "status": "not_run",
+        "references": []
+      },
+      "behavioral_evidence": {
+        "status": "not_run",
+        "references": []
+      },
+      "human_evidence": {
+        "status": "not_run",
+        "references": []
+      },
+      "known_exclusions": [
+        "The MCP runtime, watchlists and full-text acquisition work packages have not opened."
+      ],
+      "claim_ceiling": "Gate 3 behavior is specified but not implemented on the integration branch.",
+      "next_evaluation": "Open WP-30 through WP-32 only after Gate 2 human acceptance."
+    },
+    {
+      "id": "gate4.analysis-identity-federation",
+      "roadmap_gate": "gate4",
+      "mechanism_status": "specified",
+      "deterministic_evidence": {
+        "status": "not_run",
+        "references": []
+      },
+      "behavioral_evidence": {
+        "status": "not_run",
+        "references": []
+      },
+      "human_evidence": {
+        "status": "not_run",
+        "references": []
+      },
+      "known_exclusions": [
+        "Analysis, identity enrichment and federation have domain contracts but no opened runtime work package."
+      ],
+      "claim_ceiling": "Gate 4 contracts exist; no source-backed analysis, identity or federation runtime is claimed.",
+      "next_evaluation": "Complete Gate 3, then land the Wave 4 schema and federation contract cut."
+    },
+    {
+      "id": "gate5.release",
+      "roadmap_gate": "release",
+      "mechanism_status": "specified",
+      "deterministic_evidence": {
+        "status": "not_run",
+        "references": []
+      },
+      "behavioral_evidence": {
+        "status": "not_run",
+        "references": []
+      },
+      "human_evidence": {
+        "status": "not_run",
+        "references": []
+      },
+      "known_exclusions": [
+        "Independent audits and both human benchmarks are incomplete."
+      ],
+      "claim_ceiling": "Release criteria are specified; Paper Insights is not release-ready.",
+      "next_evaluation": "Complete WP-50 through WP-52 after all prior gates pass."
+    }
+  ]
+}

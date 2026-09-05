@@ -8,6 +8,8 @@ import json
 import re
 from pathlib import Path
 
+from check_capability_matrix import validate_matrix
+
 try:
     import tomllib
 except ModuleNotFoundError:  # Python 3.10 can still run the dependency-free hook checks.
@@ -24,11 +26,14 @@ REQUIRED_FILES = (
     "docs/VISION.md",
     "docs/ARCHITECTURE.md",
     "docs/ROADMAP.md",
+    "docs/evidence/capability-matrix.json",
     "docs/specs/PRODUCT.md",
     "docs/specs/DATA-MODEL.md",
     "docs/specs/INGESTION.md",
     "docs/specs/SEARCH-AND-MCP.md",
     "docs/decisions/ADR-0001-python-sqlite.md",
+    "docs/superpowers/specs/2026-09-05-evidence-governance-design.md",
+    "docs/superpowers/plans/2026-09-05-evidence-governance-optimization.md",
     ".claude/settings.json",
     "tests/hooks/test_project_guard.py",
     "tests/hooks/test_research_router.py",
@@ -67,6 +72,17 @@ def validate_toml(failures: list[str]) -> None:
             tomllib.loads(path.read_text(encoding="utf-8"))
         except (OSError, tomllib.TOMLDecodeError) as error:
             fail(f"invalid TOML file {relative}: {error}", failures)
+
+
+def validate_capability_matrix(failures: list[str]) -> None:
+    path = ROOT / "docs" / "evidence" / "capability-matrix.json"
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        fail(f"cannot read capability matrix: {error}", failures)
+        return
+    for failure in validate_matrix(document, ROOT):
+        fail(f"capability matrix: {failure}", failures)
 
 
 def validate_python(failures: list[str]) -> None:
@@ -121,6 +137,7 @@ def main() -> int:
     validate_required_files(failures)
     validate_json(failures)
     validate_toml(failures)
+    validate_capability_matrix(failures)
     validate_python(failures)
     validate_frontmatter(ROOT / ".claude" / "agents", failures)
     validate_frontmatter(ROOT / ".agents" / "skills", failures)

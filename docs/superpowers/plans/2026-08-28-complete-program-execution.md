@@ -10,6 +10,8 @@
 
 **Supersedes for execution:** `docs/superpowers/plans/2026-08-28-foundation-vertical-slice.md`. That document remains useful as the first draft, but its interfaces and schema must not be implemented before Gate 0 below is merged.
 
+**Evidence-governance overlay:** `docs/superpowers/plans/2026-09-05-evidence-governance-optimization.md`. This companion plan adds evidence status, risk and data-flow controls without changing the work-package order or opening a blocked gate.
+
 ## 1. Non-negotiable decisions
 
 1. `papers` owns work identity only. Every observed title, abstract, DOI, author order, category, comment, journal reference, language and source URL belongs to a versioned observation.
