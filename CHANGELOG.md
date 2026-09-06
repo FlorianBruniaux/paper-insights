@@ -6,6 +6,7 @@ Toutes les modifications notables du projet sont consignées ici.
 
 ### Added
 
+- Paquet de décision proposé pour le benchmark humain de pertinence, avec options réversibles de corpus, distribution des requêtes, frontière P0 et champs liés par empreinte à compléter après inventaire.
 - Design and implementation plan for cross-cutting evidence governance without changing the existing work-package order.
 - Machine-readable capability matrix with deterministic, behavioral and human evidence states, bounded claims and next evaluations.
 - Dependency-free capability-matrix validator with fail-closed tests for invalid statuses, missing evidence, denominators and unjustified operational claims.
