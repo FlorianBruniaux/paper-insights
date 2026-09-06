@@ -1,0 +1,19 @@
+docs/benchmarks/SEARCH-RELEVANCE-DECISION.md
+  s_9b6f8b9432e2d7::t_b0eec27150c1a0 9,16,19,32,45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "4ebf30084e27ccb5c3bc5f8820ad147b7bfc52e8",
+  "prompts": {},
+  "sessions": {
+    "s_9b6f8b9432e2d7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0718e-c1ee-76c0-aa84-40289c874c7f",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "Florian BRUNIAUX <florian@bruniaux.com>"
+    }
+  }
+}
