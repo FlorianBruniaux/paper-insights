@@ -31,7 +31,7 @@ C2 est volontairement **non exécutable** tant que le décideur humain n'a pas r
 
 Après ces décisions, appliquer `current_version_rule`, puis pour chaque catégorie dans `category_order`, sélectionner dans `source_snapshot_path` les versions courantes de cette catégorie, avec titre et résumé non vides. Appliquer `selection_order`, ignorer les clés déjà retenues, puis retenir les 20 premières. Un candidat qui ne fournit pas exactement 20 entrées nouvelles pour une catégorie est `BLOCKED`; il ne remplace pas silencieusement une catégorie et ne passe pas à l'inventaire. Cette règle fixe 120 entrées distinctes avant l'inventaire et sans consulter les résultats de recherche.
 
-**Décision humaine attendue :** accepter C2 en renseignant les cinq champs ci-dessus, retenir C1 pour une preuve limitée au harnais, ou définir un autre corpus avec son périmètre, son nom et ses critères de sélection.
+**Décision humaine attendue :** accepter C2 en renseignant les six champs ci-dessus, retenir C1 pour une preuve limitée au harnais, ou définir un autre corpus avec son périmètre, son nom et ses critères de sélection.
 
 ## D2. Distribution des 30 requêtes
 
