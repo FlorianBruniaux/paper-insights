@@ -6,17 +6,17 @@ Le seuil calculable reste 24 requêtes avec au moins un papier attendu dans le t
 
 ## Portée proposée
 
-Le premier benchmark autoritaire mesurerait la recherche textuelle FTS5 sur les titres et résumés arXiv en anglais. Il ne prouverait ni la couverture de toute la littérature scientifique, ni la recherche par filtre auteur, catégorie, langue ou identifiant.
+Le premier benchmark autoritaire mesurerait la recherche textuelle FTS5 sur les titres et résumés arXiv. Il ne prouverait ni la couverture de toute la littérature scientifique, ni la recherche par filtre auteur, catégorie, langue ou identifiant.
 
 ## D1. Corpus de référence
 
 | Option | Contenu | Limite |
 | --- | --- | --- |
 | C1 | Fixture locale actuelle | Vérifie le mécanisme, pas un corpus représentatif. |
-| C2 | 120 versions courantes arXiv en anglais, 20 dans chacune des catégories `cs.AI`, `cs.CL`, `cs.IR`, `cs.LG`, `stat.ML` et `cs.SE` | Représente seulement ce périmètre arXiv et ces métadonnées. |
+| C2 | 120 versions courantes arXiv, 20 dans chacune des catégories `cs.AI`, `cs.CL`, `cs.IR`, `cs.LG`, `stat.ML` et `cs.SE` | Représente seulement ce périmètre arXiv et ces métadonnées. |
 | C3 | Corpus hétérogène multi-source | Impossible avant les providers et les décisions de couverture correspondants. |
 
-**Recommandation : C2**, nommé `gate2-arxiv-metadata-en-v1`. Les 120 versions sont des documents distincts, avec titre et résumé non vides, une version courante, une observation de métadonnées et un index publié à la même révision catalogue.
+**Recommandation : C2**, nommé `gate2-arxiv-metadata-v1`. Les 120 versions sont des documents distincts, avec titre et résumé non vides, une version courante, une observation de métadonnées et un index publié à la même révision catalogue.
 
 C2 est volontairement **non exécutable** tant que le décideur humain n'a pas renseigné ces champs pré-inventaire, sans les déduire du premier résultat réseau disponible:
 
@@ -29,7 +29,7 @@ C2 est volontairement **non exécutable** tant que le décideur humain n'a pas r
 | `deduplication_key` | Dédupliquer par identifiant arXiv canonique avant toute sélection. |
 | `current_version_rule` | Pour une clé de déduplication, retenir la version de plus grand numéro arXiv soumise au plus tard à `cutoff_submitted_at_utc`; une égalité est `BLOCKED`. |
 
-Après ces décisions, appliquer `current_version_rule`, puis pour chaque catégorie dans `category_order`, sélectionner dans `source_snapshot_path` les versions courantes dont `language` vaut `en`, de cette catégorie, avec titre et résumé non vides. Appliquer `selection_order`, ignorer les clés déjà retenues, puis retenir les 20 premières. Un candidat qui ne fournit pas exactement 20 entrées nouvelles pour une catégorie est `BLOCKED`; il ne remplace pas silencieusement une catégorie et ne passe pas à l'inventaire. Cette règle fixe 120 entrées distinctes avant l'inventaire et sans consulter les résultats de recherche.
+Après ces décisions, appliquer `current_version_rule`, puis pour chaque catégorie dans `category_order`, sélectionner dans `source_snapshot_path` les versions courantes de cette catégorie, avec titre et résumé non vides. Appliquer `selection_order`, ignorer les clés déjà retenues, puis retenir les 20 premières. Un candidat qui ne fournit pas exactement 20 entrées nouvelles pour une catégorie est `BLOCKED`; il ne remplace pas silencieusement une catégorie et ne passe pas à l'inventaire. Cette règle fixe 120 entrées distinctes avant l'inventaire et sans consulter les résultats de recherche.
 
 **Décision humaine attendue :** accepter C2 en renseignant les cinq champs ci-dessus, retenir C1 pour une preuve limitée au harnais, ou définir un autre corpus avec son périmètre, son nom et ses critères de sélection.
 
@@ -42,7 +42,7 @@ Après ces décisions, appliquer `current_version_rule`, puis pour chaque catég
 | 15 à 22 | Besoin précis | 4 à 6 termes combinant méthode, objet et contexte, 1 à 3 papiers attendus | Non |
 | 23 à 30 | Désambiguïsation | 2 à 4 termes communs à plusieurs documents, ensemble attendu explicitement justifié | Non |
 
-Les 30 requêtes sont en anglais, comme les titres et résumés du corpus proposé. La préparation utilise seulement `corpus_inventory.jsonl`, avant toute exécution. Chaque `expected_relevant_paper_ids` doit contenir des `paper_id` de cet inventaire. Une requête n'emploie ni opérateur FTS brut, ni filtre CLI, ni identifiant absent du champ textuel indexé. Les six slots « must-find » visent six papiers distincts et au moins quatre des six catégories du corpus proposé. Les 24 autres slots couvrent les six catégories, avec au moins trois slots par catégorie.
+Les 30 requêtes sont en anglais. Le corpus C2 ne garantit pas la langue des titres ni des résumés: le normaliseur arXiv actuel ne renseigne pas ce champ et la sélection ne le filtre pas. La préparation utilise seulement `corpus_inventory.jsonl`, avant toute exécution. Chaque `expected_relevant_paper_ids` doit contenir des `paper_id` de cet inventaire. Une requête n'emploie ni opérateur FTS brut, ni filtre CLI, ni identifiant absent du champ textuel indexé. Les six slots « must-find » visent six papiers distincts et au moins quatre des six catégories du corpus proposé. Les 24 autres slots couvrent les six catégories, avec au moins trois slots par catégorie.
 
 **Recommandation :** adopter cette distribution. Elle couvre les usages textuels réellement mesurés, garde les recherches critiques explicites et ne présente pas les filtres hors harnais comme validés.
 
