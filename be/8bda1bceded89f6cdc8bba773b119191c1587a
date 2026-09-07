@@ -1,0 +1,25 @@
+docs/specs/INGESTION.md
+  s_9b6f8b9432e2d7::t_90df9bc3b276e6 214
+src/paper_insights/adapters/providers/arxiv/client.py
+  s_9b6f8b9432e2d7::t_f05d0f13806b09 164
+CHANGELOG.md
+  s_9b6f8b9432e2d7::t_90df9bc3b276e6 39
+tests/providers/test_arxiv_pagination.py
+  s_9b6f8b9432e2d7::t_f1dfc42eccffc6 87
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "be8bda1bceded89f6cdc8bba773b119191c1587a",
+  "prompts": {},
+  "sessions": {
+    "s_9b6f8b9432e2d7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0718e-c1ee-76c0-aa84-40289c874c7f",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "Florian BRUNIAUX <florian@bruniaux.com>"
+    }
+  }
+}
