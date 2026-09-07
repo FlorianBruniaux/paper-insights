@@ -1,0 +1,22 @@
+docs/benchmarks/SEARCH-RELEVANCE-DECISION.md
+  s_9b6f8b9432e2d7::t_346740b54fcf11 3,11-13,21,23,25,27-32,34,36,38,49,51,53,61,63,65,67,69,71-78,82,84
+  s_9b6f8b9432e2d7::t_1bd27c02b45b3c 7,26,70
+CHANGELOG.md
+  s_9b6f8b9432e2d7::t_346740b54fcf11 39
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "a4efc4030d2deff7ff03c142b842a5efcd016b5a",
+  "prompts": {},
+  "sessions": {
+    "s_9b6f8b9432e2d7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0718e-c1ee-76c0-aa84-40289c874c7f",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "Florian BRUNIAUX <florian@bruniaux.com>"
+    }
+  }
+}
