@@ -211,4 +211,4 @@ Chaque erreur publique contient version de schéma, code, étape et message dér
 
 ## arXiv P1
 
-Le premier adapter cible accepte texte, catégories, limite de 1 à 100, fenêtre de dates et curseur. Chaque requête utilise `sortBy=submittedDate` et `sortOrder=descending`, afin que les pages commencent par les versions soumises les plus récemment. Le parser préserve ordre des auteurs, catégories, commentaire, journal de référence, DOI et URLs lorsqu'ils sont fournis. Un champ absent reste absent.
+Le premier adapter cible accepte texte, catégories, limite de 1 à 100, fenêtre de dates et curseur. Chaque requête utilise `sortBy=submittedDate` et `sortOrder=descending`; les records du provider sont donc ordonnés selon `submittedDate` décroissant. Cet ordre ne prouve pas qu'une version est éligible à un cutoff historique: ce contrôle doit être effectué séparément à partir des métadonnées de la version récupérée. Le parser préserve ordre des auteurs, catégories, commentaire, journal de référence, DOI et URLs lorsqu'ils sont fournis. Un champ absent reste absent.
