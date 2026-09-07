@@ -1,0 +1,21 @@
+docs/specs/INGESTION.md
+  s_9b6f8b9432e2d7::t_9956fecff14cb3 214
+CHANGELOG.md
+  s_9b6f8b9432e2d7::t_9956fecff14cb3 39
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "f27d979c58373daadc56527e01cebdeaaed312d8",
+  "prompts": {},
+  "sessions": {
+    "s_9b6f8b9432e2d7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0718e-c1ee-76c0-aa84-40289c874c7f",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Florian BRUNIAUX <florian@bruniaux.com>"
+    }
+  }
+}
