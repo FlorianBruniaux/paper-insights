@@ -84,7 +84,7 @@ def test_cursor_and_query_fields_are_encoded_deterministically() -> None:
     assert seen[0].params["start"] == "7"
     assert seen[0].params["max_results"] == "1"
     assert seen[0].params["sortBy"] == "submittedDate"
-    assert seen[0].params["sortOrder"] == "ascending"
+    assert seen[0].params["sortOrder"] == "descending"
     search_query = seen[0].params["search_query"]
     assert 'all:"evidence"' in search_query
     assert "cat:cs.AI" in search_query

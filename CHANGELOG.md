@@ -36,6 +36,7 @@ Toutes les modifications notables du projet sont consignées ici.
 
 ### Changed
 
+- Les requêtes arXiv sont désormais triées par date de soumission décroissante, ce qui aligne la pagination provider avec la sélection Gate 2 des versions récentes avant le cutoff approuvé.
 - Les décisions produit D1 à D3 du benchmark humain de pertinence sont enregistrées comme approuvées; les liaisons de capture source, catalogue, index et inventaire restent `PENDING_OBSERVATION`, et le Gate 2 reste bloqué à 0/30.
 - Project validation now consumes the capability matrix, and README distinguishes the implemented Gate 2 integration surface from the blocked human relevance gate and unopened later waves.
 - The roadmap and complete execution plan now reference the evidence-governance overlay as a cross-cutting control rather than a competing plan.

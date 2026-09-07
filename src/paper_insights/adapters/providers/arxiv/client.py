@@ -161,7 +161,7 @@ class ArxivClient:
                 "max_results": str(requested),
                 "search_query": _search_query(query),
                 "sortBy": "submittedDate",
-                "sortOrder": "ascending",
+                "sortOrder": "descending",
                 "start": str(start),
             }
             fetched = self._fetch_page(params)
