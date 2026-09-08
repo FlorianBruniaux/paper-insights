@@ -1,22 +1,22 @@
 ---
 name: paper-ingest
-description: Preview and ingest papers from supported sources into the local Paper Insights corpus. Use for adding an arXiv paper, collecting a query or running a watchlist. Do not use for read-only corpus research.
+description: Preview and ingest papers from supported sources into the local Paper Insights corpus. Use for adding an arXiv paper or collecting a query. Do not use for read-only corpus research, citation-only exports or watchlists, which are not operational yet.
+allowed-tools: ["Bash(uv run paper-insights *)", "Bash(paper-insights *)"]
+effort: low
 ---
 
 # Ingest scientific papers
 
 Keep ingestion in the main session because it can access the network and mutate the local corpus.
 
+From the repository, invoke the CLI as `uv run paper-insights`. Use `paper-insights` only when the package is already installed in the active environment.
+
 ## Workflow
 
-1. Run `paper-insights doctor --json`. Stop on failed required checks without exposing configuration values.
-2. Run the requested `discover` or `ingest` command in preview mode with `--json`.
-3. Report source, canonical query, selected identifiers, exclusions, discovery errors, requested artifacts and output root.
-4. For one explicit paper already requested by the user, execute the corresponding ingestion after a successful preview.
-5. For a query, category, author, watchlist or multiple identifiers, wait for explicit confirmation. Repeat the same command with `--yes` only after confirmation.
-6. Report run id, created, updated, unchanged and failed counts. List each failure code and source identifier.
-7. Run the read-only status command and report whether the catalogue needs a search-index rebuild.
+1. Run `paper-insights doctor --json`. Continue only when required checks pass; otherwise report the closed failure or `UNKNOWN` without exposing configuration values.
+2. Run `paper-insights discover arxiv ... --json`, or `paper-insights ingest arxiv ... --json` without `--yes`, for the exact selectors requested. Continue only when the preview reports the canonical query, selected identifiers, exclusions, discovery errors and requested artifacts.
+3. For one explicit paper already requested by the user, execute the corresponding ingestion after the successful preview. For a query, category, author or multiple identifiers, wait for explicit confirmation of that preview and then repeat the same ingestion with `--yes`.
+4. Report the run ID plus created, updated, unchanged and failed counts. Completion requires every recorded failure to include its public code and source identifier.
+5. Run `paper-insights doctor --json` again. Finish by reporting corpus health and whether the search index needs rebuilding.
 
 Do not edit the corpus directly, bypass preview, broaden the query or download PDFs unless the preview and user request include them. A preview does not prove that anything was ingested.
-
-The CLI is planned but not implemented in the initial scaffold. Until `paper-insights doctor` exists, stop after reporting that the ingestion workflow is unavailable.

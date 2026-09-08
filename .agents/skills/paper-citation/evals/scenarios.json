@@ -1,0 +1,18 @@
+{
+  "skill": "paper-citation",
+  "positive": [
+    "Exporte le BibTeX de ce papier déjà présent dans Paper Insights",
+    "Donne-moi la citation Markdown du papier arXiv 2401.01234 stocké",
+    "Génère le CSL-JSON exact de cette publication locale",
+    "Prépare la référence bibliographique vérifiée pour mon article",
+    "Rends la citation de cette version précise sans compléter les champs absents",
+    "Cite ce DOI à partir des métadonnées enregistrées dans le corpus",
+    "Export the stored paper as an exact BibTeX citation",
+    "Return the CSL-JSON citation for this Paper Insights paper ID"
+  ],
+  "negative": [
+    "Cherche les meilleurs papiers de mon corpus sur RAG",
+    "Télécharge et ajoute ce DOI au corpus avant de le citer",
+    "Reconstruis une référence probable à partir du titre seulement"
+  ]
+}

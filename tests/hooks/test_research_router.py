@@ -34,6 +34,18 @@ class ResearchRouterTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertIn("paper-research", payload["hookSpecificOutput"]["additionalContext"])
 
+    def test_routes_standalone_citation_export(self) -> None:
+        result = run_hook("Exporte le BibTeX du papier arXiv 2401.01234 déjà stocké")
+        payload = json.loads(result.stdout)
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("paper-citation", payload["hookSpecificOutput"]["additionalContext"])
+
+    def test_combined_search_and_citation_stays_with_research(self) -> None:
+        result = run_hook("Cherche les papiers sur RAG et donne leur citation")
+        payload = json.loads(result.stdout)
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("paper-research", payload["hookSpecificOutput"]["additionalContext"])
+
     def test_ignores_unrelated_prompt(self) -> None:
         result = run_hook("Corrige le style de cette page Astro")
         self.assertEqual(result.returncode, 0)

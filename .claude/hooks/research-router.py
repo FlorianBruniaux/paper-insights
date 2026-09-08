@@ -8,7 +8,7 @@ import re
 import sys
 
 PAPER_CONTEXT = re.compile(
-    r"\b(arxiv|paper|papers|papier|papiers|publication|publications|preprint|preprints)\b",
+    r"\b(arxiv|bibtex|csl(?:-json)?|doi|paper|papers|papier|papiers|publication|publications|preprint|preprints)\b",
     re.IGNORECASE,
 )
 INGEST_INTENT = re.compile(
@@ -16,7 +16,11 @@ INGEST_INTENT = re.compile(
     re.IGNORECASE,
 )
 RESEARCH_INTENT = re.compile(
-    r"\b(search|find|compare|cite|citation|cherche|recherche|trouve|compare|source)\w*\b",
+    r"\b(search|find|compare|cherche|recherche|trouve|compare|source)\w*\b",
+    re.IGNORECASE,
+)
+CITATION_INTENT = re.compile(
+    r"\b(cite|citer|citation|bibtex|csl(?:-json)?|référence|reference)\w*\b",
     re.IGNORECASE,
 )
 
@@ -37,6 +41,13 @@ def context_for(prompt: str) -> str | None:
             "Use the paper-research skill and paper-researcher agent. Return source-backed "
             "metadata "
             "and passages, and state local corpus coverage limits."
+        )
+    if CITATION_INTENT.search(prompt):
+        return (
+            "[paper-insights routing] This is a standalone citation export request. "
+            "Use the paper-citation skill and the read-only Gate 2 CLI. Return the exact "
+            "stored citation with provenance and missing fields; do not infer metadata or "
+            "acquire a paper."
         )
     return None
 

@@ -1,0 +1,18 @@
+{
+  "skill": "paper-ingest",
+  "positive": [
+    "Ajoute le papier arXiv 2401.01234 à mon corpus local",
+    "Prévisualise l'ingestion des derniers papiers arXiv sur les coding agents",
+    "Collecte les publications de la catégorie cs.AI après confirmation",
+    "Ingestion Paper Insights pour ces trois identifiants arXiv",
+    "Montre-moi le manifeste avant d'importer cette requête dans le corpus",
+    "Récupère les métadonnées arXiv de cet auteur et demande-moi confirmation",
+    "Discover this arXiv query in Paper Insights without mutating the corpus",
+    "Ingest this explicit arXiv identifier into the local paper corpus"
+  ],
+  "negative": [
+    "Cherche dans mon corpus les papiers sur les agents autonomes",
+    "Exporte la citation BibTeX du papier arXiv déjà stocké",
+    "Crée une watchlist quotidienne sur cs.LG"
+  ]
+}

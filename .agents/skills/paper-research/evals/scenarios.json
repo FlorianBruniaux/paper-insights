@@ -1,0 +1,18 @@
+{
+  "skill": "paper-research",
+  "positive": [
+    "Cherche dans mon corpus local les papiers sur l'évaluation des agents",
+    "Compare les articles déjà indexés sur RAG et GraphRAG",
+    "Quels papiers de ma collection parlent de calibration des LLM ?",
+    "Trouve les passages indexés qui soutiennent cette affirmation",
+    "Liste les travaux de cet auteur présents dans Paper Insights",
+    "Recherche les publications cs.AI stockées depuis 2025",
+    "Search my local Paper Insights corpus for tool-use benchmarks",
+    "Compare the indexed abstracts about retrieval evaluation"
+  ],
+  "negative": [
+    "Ajoute ces nouveaux résultats arXiv au corpus",
+    "Donne-moi uniquement le BibTeX du papier déjà stocké",
+    "Fais une revue systématique du Web sur les agents autonomes"
+  ]
+}
