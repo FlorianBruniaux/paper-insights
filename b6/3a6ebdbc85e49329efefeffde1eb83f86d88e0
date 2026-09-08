@@ -1,0 +1,30 @@
+docs/evidence/RISK-REGISTER.md
+  s_9b6f8b9432e2d7::t_5f7129dbafb04c 24,27
+docs/benchmarks/SEARCH-RELEVANCE-DECISION.md
+  s_9b6f8b9432e2d7::t_dc22d7d6c119f1 3,37,52,64,78-81,84,89-90
+CHANGELOG.md
+  s_9b6f8b9432e2d7::t_dc22d7d6c119f1 39
+README.md
+  s_9b6f8b9432e2d7::t_dc22d7d6c119f1 9
+docs/evidence/capability-matrix.json
+  s_9b6f8b9432e2d7::t_dc22d7d6c119f1 92-93,95-96
+  s_9b6f8b9432e2d7::t_7d707f5e22a6ed 44-47,54,56-57
+  s_9b6f8b9432e2d7::t_3804fcea2caefc 74-77
+  s_9b6f8b9432e2d7::t_7b6cb17ff10c56 86
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "b63a6ebdbc85e49329efefeffde1eb83f86d88e0",
+  "prompts": {},
+  "sessions": {
+    "s_9b6f8b9432e2d7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0718e-c1ee-76c0-aa84-40289c874c7f",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Florian BRUNIAUX <florian@bruniaux.com>"
+    }
+  }
+}
