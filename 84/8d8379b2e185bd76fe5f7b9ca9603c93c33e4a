@@ -1,0 +1,50 @@
+tests/hooks/test_research_router.py
+  s_9b6f8b9432e2d7::t_9a6b6674c0b5bb 37-48
+CHANGELOG.md
+  s_9b6f8b9432e2d7::t_5ed5a1d235ee71 40
+  s_9b6f8b9432e2d7::t_f3dcab52e2399c 9
+.claude/hooks/research-router.py
+  s_9b6f8b9432e2d7::t_333fb7a3f12fdd 11,19-23,45-50
+  s_c95e7ae6af0104::t_336e5b780d4f17 51
+tests/test_skill_contracts.py
+  s_9b6f8b9432e2d7::t_882c0e43558c0f 1-41
+  s_9b6f8b9432e2d7::t_9e88f8fa796101 42-45
+.agents/skills/paper-ingest/SKILL.md
+  s_9b6f8b9432e2d7::t_290b04d7b5b41a 3-5,12-13,16-20
+docs/evidence/academic-research-skills-audit.md
+  s_9b6f8b9432e2d7::t_57fa6f138adf5a 1-120
+.agents/skills/paper-ingest/evals/scenarios.json
+  s_9b6f8b9432e2d7::t_290b04d7b5b41a 1-18
+.agents/skills/paper-citation/evals/scenarios.json
+  s_9b6f8b9432e2d7::t_290b04d7b5b41a 1-18
+.agents/skills/paper-research/evals/scenarios.json
+  s_9b6f8b9432e2d7::t_290b04d7b5b41a 1-18
+.agents/skills/paper-research/SKILL.md
+  s_9b6f8b9432e2d7::t_290b04d7b5b41a 3-5,10,12,16-22,28
+.agents/skills/paper-citation/SKILL.md
+  s_9b6f8b9432e2d7::t_290b04d7b5b41a 4-5,10,14-17,21
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "848d8379b2e185bd76fe5f7b9ca9603c93c33e4a",
+  "prompts": {},
+  "sessions": {
+    "s_9b6f8b9432e2d7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0718e-c1ee-76c0-aa84-40289c874c7f",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Florian BRUNIAUX <florian@bruniaux.com>"
+    },
+    "s_c95e7ae6af0104": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d7e81256-4001-4c80-b15f-c0b10574b72e",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Florian BRUNIAUX <florian@bruniaux.com>"
+    }
+  }
+}
