@@ -41,18 +41,20 @@
         ]
       },
       "behavioral_evidence": {
-        "status": "not_run",
-        "references": []
+        "status": "measured",
+        "references": [
+          "docs/benchmarks/SEARCH-RELEVANCE-DECISION.md"
+        ]
       },
       "human_evidence": {
         "status": "not_run",
         "references": []
       },
       "known_exclusions": [
-        "Offline fixtures do not establish live arXiv availability, performance or full corpus recovery."
+        "One live time-bounded arXiv acquisition does not establish ongoing availability, latency distribution, exhaustive coverage or full corpus recovery."
       ],
-      "claim_ceiling": "The catalogue, bounded arXiv adapter, blob store and doctor pass offline deterministic tests.",
-      "next_evaluation": "Run a separately approved live provider smoke test against a disposable data root."
+      "claim_ceiling": "The foundation passes deterministic tests and six live category ingestions produced 120 provenance-bound arXiv metadata records with zero failed records in the approved candidate.",
+      "next_evaluation": "Measure a controlled replay and a full catalog-plus-blob recovery without changing the captured candidate."
     },
     {
       "id": "gate2.local-retrieval",
@@ -69,8 +71,10 @@
         ]
       },
       "behavioral_evidence": {
-        "status": "not_run",
-        "references": []
+        "status": "measured",
+        "references": [
+          "docs/benchmarks/SEARCH-RELEVANCE-DECISION.md"
+        ]
       },
       "human_evidence": {
         "status": "blocked",
@@ -79,16 +83,17 @@
           "total": 30
         },
         "references": [
+          "docs/benchmarks/SEARCH-RELEVANCE-DECISION.md",
           "docs/benchmarks/SEARCH-RELEVANCE-GATE.md",
           "tests/benchmarks/search_queries.jsonl"
         ]
       },
       "known_exclusions": [
-        "The human relevance gate is 0 of 30 and no representative reference corpus has been approved.",
-        "Passing fixture searches do not establish relevance on the intended corpus."
+        "The human relevance gate is 0 of 30; 25 raw top-five matches and zero raw must-find misses do not replace human verdicts.",
+        "One approved 120-document arXiv metadata candidate does not establish relevance beyond its categories, date window, titles and abstracts."
       ],
-      "claim_ceiling": "Prepared ingestion, local FTS5 search, citations and the relevance harness pass offline tests; search relevance remains unvalidated by humans.",
-      "next_evaluation": "Record the three Gate 2 product decisions and complete all 30 human reviews."
+      "claim_ceiling": "The approved 120-document candidate completed 30 local FTS5 searches with complete coverage and 25 raw top-five matches; search relevance remains unvalidated by humans.",
+      "next_evaluation": "Complete all 30 human reviews, validate the immutable reviewed artifact and record a separate Gate 2 approval."
     },
     {
       "id": "gate3.mcp-monitoring-fulltext",

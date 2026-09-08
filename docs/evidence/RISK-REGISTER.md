@@ -21,10 +21,10 @@ Ce registre relie chaque risque durable aux contrôles existants, à la capacit�
 
 | ID | Risque | Contrôles existants ou prévus | Source de preuve | Lacune résiduelle |
 | --- | --- | --- | --- | --- |
-| R1 | Métadonnées ou versions écrasées | Observations immuables, snapshots source, blobs adressés par contenu, clés étrangères | `gate1.foundation`, `gate2.local-retrieval` | Aucun corpus réel de référence ni restauration complète après incident n'a été mesuré. |
+| R1 | Métadonnées ou versions écrasées | Observations immuables, snapshots source, blobs adressés par contenu, clés étrangères | `gate1.foundation`, `gate2.local-retrieval` | Le candidat réel lie ses snapshots et empreintes, mais aucune restauration complète après incident n'a été mesurée. |
 | R2 | Ingestion partielle présentée comme succès | Runs et outcomes fermés, compteurs, réparation explicite, publication par record | `gate1.foundation`, `gate2.local-retrieval` | Les fixtures hors réseau ne couvrent pas une panne réelle du provider ou du disque. |
 | R3 | Instructions adversariales suivies depuis un papier | Frontière LLM fermée, texte traité comme donnée, test d'injection prévu dans WP-40 | `gate4.analysis-identity-federation` | Aucun backend LLM ni test comportemental n'est encore exécuté. |
-| R4 | Recherche techniquement valide mais éditorialement inutile | Harnais aveugle de 30 requêtes, résultats liés aux empreintes, revue humaine obligatoire | `gate2.local-retrieval` | Revue humaine à 0 sur 30 et corpus de référence non approuvé. |
+| R4 | Recherche techniquement valide mais éditorialement inutile | Harnais aveugle de 30 requêtes, résultats liés aux empreintes, revue humaine obligatoire | `gate2.local-retrieval` | Candidat et requêtes approuvés, 25 correspondances top cinq brutes, mais revue humaine encore à 0 sur 30. |
 | R5 | Acquisition illégitime ou document hostile | Politique avant code, HTTPS, hôtes, redirections, taille, MIME et extraction bornée | `gate3.mcp-monitoring-fulltext` | WP-32 n'est pas ouvert et la politique de texte intégral n'est pas approuvée. |
 | R6 | Mutation ou appel réseau depuis le MCP | Six outils fermés, ports read-only, SQLite `query_only`, instrumentation prévue | `gate3.mcp-monitoring-fulltext` | Le runtime MCP et son test stdio n'existent pas encore. |
 | R7 | Fusion de deux auteurs sur un signal ambigu | Observations séparées, ORCID/OpenAlex, événements merge/split réversibles, LinkedIn manuel | `gate4.analysis-identity-federation` | Les providers et décisions d'identité ne sont pas implémentés. |

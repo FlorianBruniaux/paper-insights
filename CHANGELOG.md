@@ -36,7 +36,7 @@ Toutes les modifications notables du projet sont consignées ici.
 
 ### Changed
 
-- Les décisions D1 à D3 sont approuvées et le paquet Gate 2 lie maintenant les manifestes observés du candidat `gate2-arxiv-metadata-v1`, son catalogue à la révision 147, son index `fts-v2` et son inventaire aveugle de 120 papiers. La sélection capturée respecte le cutoff approuvé, contient 20 nouveaux papiers par étape de catégorie et n'a ni titre ou résumé vide, ni version autre que `v1`, ni égalité de `submitted_at`; elle ne prouve pas l'exhaustivité historique d'arXiv. Les 30 requêtes restent proposées, aucune recherche ni revue humaine n'existe et le Gate 2 reste bloqué à 0/30.
+- Les décisions D1 à D3, puis les 30 vérités D2 exactes, sont approuvées. Le paquet Gate 2 lie le candidat réel `gate2-arxiv-metadata-v1`, son catalogue à la révision 147, son index `fts-v2`, son inventaire aveugle, ses requêtes et son exécution: 30 couvertures complètes, 25 correspondances top cinq brutes et aucun miss must-find. Les 30 verdicts humains restent absents; le Gate 2 reste bloqué à 0/30 et la mesure ne prouve pas l'exhaustivité historique d'arXiv.
 - Les requêtes arXiv ordonnent désormais les records provider selon `submittedDate` décroissant. L'éligibilité d'une version à un cutoff historique doit être vérifiée séparément à partir des métadonnées de la version récupérée.
 - Project validation now consumes the capability matrix, and README distinguishes the implemented Gate 2 integration surface from the blocked human relevance gate and unopened later waves.
 - The roadmap and complete execution plan now reference the evidence-governance overlay as a cross-cutting control rather than a competing plan.

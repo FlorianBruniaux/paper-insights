@@ -6,7 +6,7 @@ Paper Insights sera un corpus local de publications scientifiques pour la recher
 
 La branche d'intégration `codex/complete-program-execution` contient les contrats Gate 0, la fondation locale Gate 1, l'ingestion arXiv préparée, la recherche FTS5, les collections, les citations et leur CLI Gate 2. Ces comportements passent sur fixtures locales et sans réseau.
 
-Gate 2 reste bloqué par la revue humaine de pertinence, actuellement à 0 sur 30. Le serveur MCP, les watchlists, l'acquisition de texte intégral, l'analyse LLM, l'identité enrichie et la fédération restent des contrats cibles. Le projet n'est pas présenté comme prêt à publier ou vérifié contre un corpus réel.
+Gate 2 reste bloqué par la revue humaine de pertinence, actuellement à 0 sur 30. Un candidat réel de 120 métadonnées arXiv et son index FTS5 ont exécuté 30 requêtes avec une couverture complète: 25 ont placé au moins un papier attendu dans le top cinq, sans échec brut des six requêtes must-find. Cette mesure ne remplace ni les 30 verdicts humains, ni l'approbation finale du gate. Le serveur MCP, les watchlists, l'acquisition de texte intégral, l'analyse LLM, l'identité enrichie et la fédération restent des contrats cibles. Le projet n'est pas présenté comme prêt à publier.
 
 ## Objectifs
 
