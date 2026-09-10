@@ -37,6 +37,7 @@ Toutes les modifications notables du projet sont consignées ici.
 
 ### Changed
 
+- Le protocole du benchmark Gate 2 pointe désormais vers les décisions D1 à D3 déjà approuvées et distingue leur portée sur le candidat actuel des 30 revues humaines toujours absentes.
 - Les trois skills Paper Insights utilisent désormais le CLI Gate 2 réellement disponible, gardent le MCP comme capacité Gate 3 non ouverte et possèdent des corpus de routage positifs et négatifs partagés par les projections Claude Code et Codex. Le hook de routage distingue aussi un export de citation autonome d'une recherche qui demande ensuite une citation.
 - Les décisions D1 à D3, puis les 30 vérités D2 exactes, sont approuvées. Le paquet Gate 2 lie le candidat réel `gate2-arxiv-metadata-v1`, son catalogue à la révision 147, son index `fts-v2`, son inventaire aveugle, ses requêtes et son exécution: 30 couvertures complètes, 25 correspondances top cinq brutes et aucun miss must-find. Les 30 verdicts humains restent absents; le Gate 2 reste bloqué à 0/30 et la mesure ne prouve pas l'exhaustivité historique d'arXiv.
 - Les requêtes arXiv ordonnent désormais les records provider selon `submittedDate` décroissant. L'éligibilité d'une version à un cutoff historique doit être vérifiée séparément à partir des métadonnées de la version récupérée.

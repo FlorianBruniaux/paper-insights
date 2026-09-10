@@ -2,15 +2,15 @@
 
 Le Gate 2 reste bloqué tant que 30 revues humaines complètes ne placent pas un papier attendu dans le top cinq pour au moins 24 requêtes et qu'un humain n'a pas conclu à zéro P0. Le harnais exécute et enregistre la mesure. Il ne choisit pas les requêtes, les papiers attendus, l'identité du reviewer, le verdict P0 ou une approbation.
 
-## Décisions produit requises
+## Décisions produit enregistrées
 
-Le dépôt ne définit pas encore trois éléments nécessaires à une évaluation autoritaire:
+Le paquet [SEARCH-RELEVANCE-DECISION.md](SEARCH-RELEVANCE-DECISION.md) enregistre les trois décisions du candidat autoritaire `gate2-arxiv-metadata-v1`:
 
-1. Les critères d'une requête représentative, par exemple la distribution des sujets, formulations, langues et niveaux de spécificité.
-2. La frontière entre un mauvais classement ordinaire et un P0 de pertinence.
-3. L'instance de catalogue et d'index qui constitue le corpus de référence du Gate 2.
+1. D1 lie le corpus C2 de 120 papiers arXiv, sa sélection, son catalogue à la révision 147 et son index `fts-v2`.
+2. D2 lie la distribution des 30 requêtes et le fichier préparé de SHA-256 `65d614cd22b1443f246f3e8545762b64b5be315c21436622c5c7d7db829524c7`.
+3. D3 adopte P0-B: seul un slot must-find de 1 à 6 sans papier attendu dans le top cinq constitue un P0 de pertinence.
 
-`docs/ARCHITECTURE.md` désigne le catalogue comme autorité des documents et l'index FTS5 comme projection. Cette règle ne sélectionne pas une instance concrète du corpus. Le responsable produit doit enregistrer ces trois décisions avant de présenter le benchmark comme une preuve de sortie de gate.
+Ces décisions bornent seulement ce candidat. Une nouvelle instance de catalogue, un nouvel index, une autre distribution de requêtes ou une autre frontière P0 exige une nouvelle décision explicite avant exécution. Les décisions enregistrées ne remplacent ni les 30 revues humaines, ni l'approbation finale du Gate 2.
 
 ## Préconditions
 
@@ -80,7 +80,7 @@ Le reviewer lit `review_form.md`, puis remplit chaque ligne de `review_records.j
 
 Les trois champs sont indissociables. Le validateur refuse toute ligne qui n'en remplit qu'une partie. Le reviewer ne change ni la requête, ni les IDs attendus, ni les IDs observés après l'exécution. Aucun des fichiers générés ne contient ou ne demande une approbation automatique.
 
-Une fois les 30 revues terminées et vérifiées, l'humain peut remplacer explicitement le template suivi par Git dans `tests/benchmarks/search_queries.jsonl`. Cette mutation n'appartient pas au harnais.
+Une fois les 30 revues terminées et vérifiées, l'humain peut remplacer explicitement le template suivi par Git dans `tests/benchmarks/search_queries.jsonl`. Cette mutation n'appartient pas au harnais. Pour le candidat `gate2-arxiv-metadata-v1`, appliquer la définition P0-B enregistrée dans le paquet de décision.
 
 ## 5. Valider les critères calculables
 
@@ -100,7 +100,7 @@ Codes de sortie:
 | `1` | `FAILED`: les 30 revues sont complètes, mais le seuil ou la règle zéro P0 échoue. |
 | `2` | `BLOCKED` ou entrée invalide: revue incomplète, schéma faux ou artefact indisponible. |
 
-`SATISFIED` n'est pas une approbation. La sortie de Gate 2 exige encore les décisions produit listées plus haut et l'intégration humaine explicite du jeu revu.
+`SATISFIED` n'est pas une approbation. Pour le candidat actuel, D1 à D3 sont enregistrées, mais la sortie de Gate 2 exige encore l'intégration humaine explicite du jeu revu et une approbation finale distincte.
 
 ## Vérification automatisée du harnais
 
