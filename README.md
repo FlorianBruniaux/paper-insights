@@ -21,6 +21,10 @@ Build a local scientific literature corpus with traceable sources. Discover and 
 
 Paper Insights is the scientific literature companion to [YouTube Video Insights](https://github.com/FlorianBruniaux/youtube-video-insights), which covers video transcripts and timestamped evidence. Each project keeps its own corpus and provenance. Cross-corpus federation is planned.
 
+![Paper Insights workflow: preview arXiv metadata, confirm ingestion, preserve the SQLite catalog and source snapshots, index titles and abstracts with FTS5, search papers and passages, and export BibTeX, Markdown, or CSL-JSON citations. Human relevance review is pending; later features are marked as planned.](docs/assets/paper-insights-workflow.png)
+
+The infographic shows the current CLI workflow and separates planned features in the footer. Human relevance review remains pending. The branching workflow is available as [Mermaid source](docs/assets/paper-insights-workflow.mmd).
+
 ## Project status
 
 The `main` branch contains the Gate 0 contracts, Gate 1 local foundation, prepared arXiv ingestion, FTS5 search, collections, citations, and the Gate 2 CLI. These behaviors pass tests against local fixtures without network access.

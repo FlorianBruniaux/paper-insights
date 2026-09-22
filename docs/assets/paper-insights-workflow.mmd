@@ -1,0 +1,28 @@
+flowchart LR
+    ARXIV[arXiv query and category] --> PREVIEW[Preview exact selection]
+    PREVIEW --> APPROVE{Approve prepared manifest?}
+    APPROVE -->|No| STOP[No corpus changes]
+    APPROVE -->|Yes| INGEST[Ingest prepared records]
+    INGEST --> CAT[SQLite catalog and source snapshots]
+    CAT --> INDEX[Explicit FTS5 index rebuild]
+    INDEX --> FTS[Title and abstract passages]
+    FTS --> SEARCH[Paper and passage search with collection filters]
+    SEARCH --> SELECT[Select a paper identifier]
+    CAT --> COLLECTIONS[Manage paper collections]
+    COLLECTIONS -. Rebuild after catalog changes .-> INDEX
+    SELECT --> CITE[Render citation from a stored observation]
+    CAT --> CITE
+    CITE --> EXPORT[BibTeX, Markdown, or CSL-JSON]
+
+    subgraph STATUS[Experimental status]
+        HUMAN[Human relevance review pending]
+    end
+
+    subgraph PLANNED[Planned features, not currently available]
+        MCP[Read-only MCP]
+        WATCH[Watchlists]
+        TEXT[Full-text acquisition]
+        ANALYSIS[LLM analysis]
+        AUTHORS[Author identity enrichment]
+        FEDERATION[Cross-corpus federation]
+    end

@@ -6,6 +6,8 @@ All notable changes to this project are documented here.
 
 ### Added
 
+- English workflow infographic near the top of the README, styled after YouTube Video Insights, with current CLI stages, experimental status, and a separate planned-feature row.
+- Editable Mermaid workflow and image-generation prompt with source and asset provenance.
 - Author profile at the top of the README, repository badges, and links to YouTube Video Insights, Claude Code Ultimate Guide, Google Search Console MCP, and the wider project portfolio.
 - Evidence-backed audit of `academic-research-skills` at commit `8e4c877`, with scores for all four skills, verification of all 189 referenced resources, and a bounded adoption decision for Paper Insights.
 - Proposed decision packet for the human relevance benchmark, with reversible corpus options, query distribution, P0 boundaries, and fingerprint-bound fields to complete after inventory.
