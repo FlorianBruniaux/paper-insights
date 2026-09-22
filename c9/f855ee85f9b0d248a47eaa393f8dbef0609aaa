@@ -1,0 +1,21 @@
+CHANGELOG.md
+  s_a374aa64c5b234::t_1a09edb7c1f5ba 40
+README.md
+  s_a374aa64c5b234::t_1a09edb7c1f5ba 7,9,91
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "c9f855ee85f9b0d248a47eaa393f8dbef0609aaa",
+  "prompts": {},
+  "sessions": {
+    "s_a374aa64c5b234": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0c7e8-92f3-77d1-907f-06a834051207",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Florian BRUNIAUX <florian@bruniaux.com>"
+    }
+  }
+}
