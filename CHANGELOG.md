@@ -1,50 +1,52 @@
 # Changelog
 
-Toutes les modifications notables du projet sont consignées ici.
+All notable changes to this project are documented here.
 
 ## [Unreleased]
 
 ### Added
 
-- Audit sourcé du dépôt `academic-research-skills` au commit `8e4c877`, avec score des quatre skills, fermeture des 189 ressources et décision d'adoption bornée pour Paper Insights.
-- Paquet de décision proposé pour le benchmark humain de pertinence, avec options réversibles de corpus, distribution des requêtes, frontière P0 et champs liés par empreinte à compléter après inventaire.
+- Author profile at the top of the README, repository badges, and links to YouTube Video Insights, Claude Code Ultimate Guide, Google Search Console MCP, and the wider project portfolio.
+- Evidence-backed audit of `academic-research-skills` at commit `8e4c877`, with scores for all four skills, verification of all 189 referenced resources, and a bounded adoption decision for Paper Insights.
+- Proposed decision packet for the human relevance benchmark, with reversible corpus options, query distribution, P0 boundaries, and fingerprint-bound fields to complete after inventory.
 - Design and implementation plan for cross-cutting evidence governance without changing the existing work-package order.
 - Machine-readable capability matrix with deterministic, behavioral and human evidence states, bounded claims and next evaluations.
 - Dependency-free capability-matrix validator with fail-closed tests for invalid statuses, missing evidence, denominators and unjustified operational claims.
 - Risk register and checked data-flow inventory tied to the capability matrix and direct network imports.
-- Socle documentaire du projet Paper Insights.
-- Specs initiales pour le produit, le modèle de données, l'ingestion, la recherche et le MCP.
-- Configuration locale pour Claude Code et les agents compatibles.
-- Hooks de sécurité et de routage accompagnés de tests unitaires.
-- Découverte `unittest` vérifiée depuis la racine du répertoire `tests`.
-- Garde Git vérifiée contre les stages larges sans bloquer les pathspecs relatifs explicites.
-- Roadmap et plan d'implémentation de la première tranche verticale.
-- Plan d'exécution complet des phases 0 à 7, avec contrats P0, lots parallèles, propriétaires de fichiers, gates et critères de release.
-- Contrats Gate 0 pour observations versionnées, snapshots source multi-records, identifiants à clés étrangères et révision atomique du catalogue.
-- Specs normatives pour watchlists, analyses sourcées, identité réversible des auteurs et fédération multi-corpus.
-- Contrats fermés pour collections, trois formats de citation, six outils MCP, enveloppes JSON et codes de sortie CLI.
-- Contrat complet des ports synchrones, preuves d'identifiants séparées et artefacts bibliographiques versionnés.
-- Types de domaine immuables, ports synchrones et tests d'architecture de Gate 0.
-- Catalogue SQLite révisionné avec migration Alembic, clés étrangères composites, historique de provenance et snapshots de lecture strictement read-only.
-- Adaptateur arXiv borné avec validation des redirections, pagination déterministe, déduplication et normalisation versionnée testées sur fixtures locales.
-- Socle Python installable, stockage de blobs atomique et diagnostics `doctor` read-only qui distinguent corruption prouvée et état `UNKNOWN`.
-- Workflow CI séparant contrôles statiques, tests unitaires sans réseau et gate de frontière MCP avant l'implémentation du runtime MCP.
-- Ingestion préparée avec confirmation exacte, attachement atomique du graphe de snapshots, transactions courtes par record, compteurs fermés, replay idempotent et réparation explicite des runs interrompues.
-- Collections applicatives et citations BibTeX, Markdown et CSL-JSON rendues depuis une observation et une provenance exactes, sans champ bibliographique inventé.
-- Index local FTS5 `fts-v2` auto-descriptif avec passages déterministes, publication sous garde de révision, lecture par descripteur en mode read-only et six filtres fermés.
-- CLI Gate 2 pour discovery, ingestion confirmée, recherche papier et passage, reconstruction d'index, citations BibTeX, Markdown et CSL-JSON, collections et réparation explicite, avec enveloppes JSON versionnées et fixtures arXiv hors ligne.
-- Harnais hors réseau du Gate 2 pour inventaire aveugle, exécution des 30 recherches, capture des cinq premiers `paper_id`, formulaire de revue et validation fermée des verdicts humains.
+- Documentation foundation for Paper Insights.
+- Initial product, data model, ingestion, search, and MCP specifications.
+- Local configuration for Claude Code and compatible agents.
+- Security and routing hooks with unit tests.
+- Verified `unittest` discovery from the root of the `tests` directory.
+- Git guard verified against broad staging without blocking explicit relative pathspecs.
+- Roadmap and implementation plan for the first vertical slice.
+- Complete execution plan for phases 0 through 7, with P0 contracts, parallel work packages, file ownership, gates, and release criteria.
+- Gate 0 contracts for versioned observations, multi-record source snapshots, foreign-key identifiers, and atomic catalog revisions.
+- Normative specifications for watchlists, evidence-backed analysis, reversible author identity, and cross-corpus federation.
+- Closed contracts for collections, three citation formats, six MCP tools, JSON envelopes, and CLI exit codes.
+- Complete synchronous port contracts, separate identifier evidence, and versioned bibliographic artifacts.
+- Immutable domain types, synchronous ports, and Gate 0 architecture tests.
+- Revisioned SQLite catalog with an Alembic migration, composite foreign keys, provenance history, and strictly read-only snapshots.
+- Bounded arXiv adapter with redirect validation, deterministic pagination, deduplication, and versioned normalization tested on local fixtures.
+- Installable Python foundation, atomic blob storage, and read-only `doctor` diagnostics that distinguish proven corruption from `UNKNOWN` status.
+- CI workflow separating static checks, offline unit tests, and the MCP boundary gate before MCP runtime implementation.
+- Prepared ingestion with exact confirmation, atomic snapshot graph attachment, short per-record transactions, closed counters, idempotent replay, and explicit repair of interrupted runs.
+- Application collections and BibTeX, Markdown, and CSL-JSON citations rendered from an exact observation and provenance, without invented bibliographic fields.
+- Self-describing local FTS5 `fts-v2` index with deterministic passages, revision-guarded publication, descriptor-bound read-only access, and six closed filters.
+- Gate 2 CLI for discovery, confirmed ingestion, paper and passage search, index rebuilding, BibTeX, Markdown, and CSL-JSON citations, collections, and explicit repair, with versioned JSON envelopes and offline arXiv fixtures.
+- Offline Gate 2 harness for blind inventory, execution of 30 searches, capture of the top five `paper_id` values, review forms, and closed validation of human verdicts.
 
 ### Changed
 
-- Publication publique du code sur GitHub avec la version intégrée sur `main`; le README conserve le statut expérimental et l'absence de licence publique.
-- Le protocole du benchmark Gate 2 pointe désormais vers les décisions D1 à D3 déjà approuvées et distingue leur portée sur le candidat actuel des 30 revues humaines toujours absentes.
-- Les trois skills Paper Insights utilisent désormais le CLI Gate 2 réellement disponible, gardent le MCP comme capacité Gate 3 non ouverte et possèdent des corpus de routage positifs et négatifs partagés par les projections Claude Code et Codex. Le hook de routage distingue aussi un export de citation autonome d'une recherche qui demande ensuite une citation.
-- Les décisions D1 à D3, puis les 30 vérités D2 exactes, sont approuvées. Le paquet Gate 2 lie le candidat réel `gate2-arxiv-metadata-v1`, son catalogue à la révision 147, son index `fts-v2`, son inventaire aveugle, ses requêtes et son exécution: 30 couvertures complètes, 25 correspondances top cinq brutes et aucun miss must-find. Les 30 verdicts humains restent absents; le Gate 2 reste bloqué à 0/30 et la mesure ne prouve pas l'exhaustivité historique d'arXiv.
-- Les requêtes arXiv ordonnent désormais les records provider selon `submittedDate` décroissant. L'éligibilité d'une version à un cutoff historique doit être vérifiée séparément à partir des métadonnées de la version récupérée.
+- README and changelog translated into English, preserving gate status, evidence limits, identifiers, and measurements.
+- Public GitHub publication with the integrated version on `main`; the README retains the experimental status and absence of a public license.
+- The Gate 2 benchmark protocol now points to the already approved D1 through D3 decisions and distinguishes their scope for the current candidate from the 30 outstanding human reviews.
+- All three Paper Insights skills now use the available Gate 2 CLI, keep MCP as an unopened Gate 3 capability, and include positive and negative routing corpora shared by the Claude Code and Codex projections. The routing hook also distinguishes standalone citation export from research that subsequently requests a citation.
+- Decisions D1 through D3, followed by the 30 exact D2 ground truths, are approved. The Gate 2 packet binds the real `gate2-arxiv-metadata-v1` candidate, its catalog at revision 147, its `fts-v2` index, blind inventory, queries, and execution: 30 fully covered queries, 25 raw top-five matches, and no must-find misses. The 30 human verdicts remain absent; Gate 2 stays blocked at 0/30, and the measurement does not prove historical arXiv exhaustiveness.
+- arXiv queries now order provider records by descending `submittedDate`. A version's eligibility for a historical cutoff must be checked separately against the retrieved version's metadata.
 - Project validation now consumes the capability matrix, and README distinguishes the implemented Gate 2 integration surface from the blocked human relevance gate and unopened later waves.
 - The roadmap and complete execution plan now reference the evidence-governance overlay as a cross-cutting control rather than a competing plan.
-- Le contrat `search-relevance-v1` distingue désormais les états `blank`, `prepared`, `executed` et `reviewed`; seule une revue complète compte pour le Gate 2.
+- The `search-relevance-v1` contract now distinguishes the `blank`, `prepared`, `executed`, and `reviewed` states; only a complete review counts toward Gate 2.
 - The arXiv adapter scopes DOI identifiers to the paper while retaining each DOI observation on its exact version, allowing multiple arXiv revisions to share the same DOI without a catalog conflict.
 - Paper search hits now carry their source, ordered authors and scoped canonical identifiers directly from the fingerprinted `fts-v2` projection.
 - Catalog connections now open only an existing database and reject file or symlink binding changes before applying writable SQLite pragmas.
@@ -53,29 +55,29 @@ Toutes les modifications notables du projet sont consignées ici.
 - Catalog snapshots now materialize a validated in-memory image before exposing a revision, preventing later concurrent writes from mixing newer rows with that revision while keeping previews free of corpus sidecars.
 - CLI success envelopes now validate closed, operation-specific nested data models, and terminal passage search exposes the same revisions, coverage, counters and hit provenance as JSON output.
 - Exit code 4 now explicitly covers any completed ingestion run with recorded item errors, including both `partial` and `failed` statuses.
-- `docs/DEVELOPMENT.md` et l'ancien plan vertical pointent désormais vers le plan complet comme seule autorité d'exécution.
-- `doctor` est spécifié strictement read-only; la récupération passe par `repair interrupted-runs --yes`.
-- Le manifeste de découverte distingue chaque capture, la création de run attache ses snapshots dans une transaction unique et l'index FTS se publie comme une base auto-descriptive unique.
-- Les locators sélectionnés participent au digest, les preuves d'identité différées évitent toute FK vers une table future et la publication FTS refuse les journaux compagnons.
-- Les commandes catalogue transportent désormais le graphe complet des snapshots et des blobs non attachés; les DTO ferment outcomes, provenance de citation, filtres de recherche, reçu d'index et identité du cache d'analyse.
-- L'attachement catalogue est lié directement au manifeste préparé; les DTO publics valident leurs valeurs à la construction, les résultats de recherche bornent et ordonnent leurs hits, et les chemins d'index sont absolus.
-- Le contrôle d'architecture couvre les imports relatifs sans module, ignore les corps de lambda différés et gèle les signatures exactes de tous les ports annoncés.
-- Les passages vérifient leur identité déterministe, les acquisitions de texte exigent HTTPS et les résultats de citation utilisent un vocabulaire d'avertissements fermé.
-- Les deux couches internes refusent les imports d'infrastructure et tous les champs tuple des DTO rejettent les alias de collections mutables.
-- Pydantic reste interdit dans le domaine, les ports et l'application hors du futur module exact de validation de la frontière LLM prévu par WP-40.
-- L'attachement retourne un mapping stable des snapshots réutilisé au replay; les échecs d'item disposent d'un contrat fermé, traçable et idempotent après rollback.
-- La réparation matérialise chaque record sélectionné non traité en échec `recovery/interrupted`; les références d'item incluent le snapshot et les messages d'erreur sont dérivés d'un vocabulaire fermé.
-- Les runs persistent séparément leurs pages et leur sélection ordonnée, ce qui rend la reprise exacte possible sans décoder un digest ni confondre les records exclus.
-- Les échecs de connexion source ont un code public distinct des timeouts et des réponses invalides.
-- La reprise des runs interrompues possède des DTO et ports fermés pour la preview read-only, la revalidation verrouillée et la mutation atomique à révision unique.
-- Les captures dupliquées sont refusées et les FKs composites ferment désormais l'appartenance entre run, source, sélection, item et erreur.
-- Chaque observation de version conserve son record sélectionné d'origine, ce qui rend la reconstruction de page déterministe même après replay d'une capture.
-- `record_item` devient l'unique mutation atomique du corpus et de l'item, et son résultat restitue les identifiants créés sans perdre le `run_id` de provenance.
-- Les identifiants provider et additionnels déclarent désormais explicitement leur portée papier ou version, sans convention silencieuse côté catalogue.
-- Les observations versionnées portent aussi `origin_source_id`, ce qui rend impossible une provenance croisée entre version, snapshot et run.
-- Les diagnostics revalident les preuves catalogue et artefact après chaque phase afin de refuser les conclusions devenues obsolètes pendant une course concurrente.
-- Les enums textuels publics utilisent `StrEnum`, ce qui rend `str(member)` identique à la valeur canonique sérialisée tout en conservant les mêmes noms et valeurs.
-- La projection catalogue de recherche inclut source, auteurs ordonnés, catégories, langue, date et collections; son empreinte logique couvre désormais chaque valeur filtrable.
-- La publication FTS restaure l'ancien index canonique après une mutation concurrente du répertoire et ne supprime jamais un nom devenu ambigu; un résidu dans un répertoire déplacé reste alors explicitement non réparé.
-- Les slugs de collection au format UUID sont refusés et le filtre collection interprète sans ambiguïté une valeur UUID comme ID, toute autre valeur comme slug.
-- La configuration refuse désormais une page arXiv supérieure à 100 et une limite de recherche supérieure à 50, conformément aux DTO et adapters publics.
+- `docs/DEVELOPMENT.md` and the old vertical-slice plan now point to the complete plan as the sole execution authority.
+- `doctor` is specified as strictly read-only; recovery uses `repair interrupted-runs --yes`.
+- The discovery manifest distinguishes every capture, run creation attaches its snapshots in a single transaction, and the FTS index is published as one self-describing database.
+- Selected locators contribute to the digest, deferred identity evidence avoids foreign keys to future tables, and FTS publication rejects companion journals.
+- Catalog commands now carry the complete graph of snapshots and unattached blobs; DTOs close the contracts for outcomes, citation provenance, search filters, index receipts, and analysis cache identity.
+- Catalog attachment is bound directly to the prepared manifest; public DTOs validate their values at construction, search results bound and order their hits, and index paths are absolute.
+- Architecture checks cover relative imports without a module, ignore deferred lambda bodies, and freeze the exact signatures of all declared ports.
+- Passages verify their deterministic identity, text acquisition requires HTTPS, and citation results use a closed warning vocabulary.
+- Both inner layers reject infrastructure imports, and all DTO tuple fields reject aliases of mutable collections.
+- Pydantic remains prohibited in the domain, ports, and application except for the exact future LLM boundary validation module planned in WP-40.
+- Attachment returns a stable snapshot mapping reused during replay; item failures have a closed, traceable, and idempotent contract after rollback.
+- Repair materializes every selected but unprocessed record as a `recovery/interrupted` failure; item references include the snapshot, and error messages derive from a closed vocabulary.
+- Runs persist their pages and ordered selection separately, allowing exact recovery without decoding a digest or confusing excluded records.
+- Source connection failures have a public code distinct from timeouts and invalid responses.
+- Interrupted-run recovery has closed DTOs and ports for read-only preview, locked revalidation, and an atomic mutation with a single revision increment.
+- Duplicate captures are rejected, and composite foreign keys now enforce ownership across run, source, selection, item, and error.
+- Every version observation retains its original selected record, making page reconstruction deterministic even after capture replay.
+- `record_item` becomes the sole atomic mutation of the corpus and item; its result returns created identifiers without losing the provenance `run_id`.
+- Provider and additional identifiers now explicitly declare paper or version scope, with no implicit catalog convention.
+- Versioned observations also carry `origin_source_id`, preventing crossed provenance between version, snapshot, and run.
+- Diagnostics revalidate catalog and artifact evidence after every phase to reject conclusions that became stale during a concurrent race.
+- Public string enums use `StrEnum`, making `str(member)` identical to the canonical serialized value while retaining the same names and values.
+- The catalog search projection includes source, ordered authors, categories, language, date, and collections; its logical fingerprint now covers every filterable value.
+- FTS publication restores the previous canonical index after a concurrent directory mutation and never removes an ambiguous name; residue in a displaced directory remains explicitly unrepaired.
+- UUID-shaped collection slugs are rejected, and the collection filter interprets a UUID value as an ID and every other value as a slug without ambiguity.
+- Configuration now rejects arXiv page sizes above 100 and search limits above 50, in line with the public DTOs and adapters.

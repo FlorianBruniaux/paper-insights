@@ -1,34 +1,55 @@
 # Paper Insights
 
-Paper Insights sera un corpus local de publications scientifiques pour la recherche documentaire, la veille et la préparation de citations. Le projet reprend les garanties utiles de YT Insights sans importer sa dette historique ni déployer PostgreSQL ou Redis avant qu'un besoin mesuré ne le justifie.
+<table>
+  <tr>
+    <td width="64">
+      <a href="https://www.florian.bruniaux.com/about/?utm_source=github&amp;utm_medium=readme&amp;utm_campaign=paper-insights"><img src="https://cc.bruniaux.com/author.png" width="56" height="56" alt="Florian Bruniaux" /></a>
+    </td>
+    <td>
+      <strong><a href="https://www.florian.bruniaux.com/about/?utm_source=github&amp;utm_medium=readme&amp;utm_campaign=paper-insights">Florian BRUNIAUX</a></strong> &middot; AI Founding Engineer @ <a href="https://methode-aristote.fr/">Méthode Aristote</a><br />
+      13 years from developer to CTO / VP Eng &middot; <a href="https://www.florian.bruniaux.com/blog/?utm_source=github&amp;utm_medium=readme&amp;utm_campaign=paper-insights">Blog &#8599;</a> &middot; <a href="https://www.florian.bruniaux.com/projects/?utm_source=github&amp;utm_medium=readme&amp;utm_campaign=paper-insights">Projects &#8599;</a>
+    </td>
+  </tr>
+</table>
 
-## État du projet
+[![CI](https://github.com/FlorianBruniaux/paper-insights/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/FlorianBruniaux/paper-insights/actions/workflows/ci.yml)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
+[![SQLite FTS5](https://img.shields.io/badge/search-SQLite%20FTS5-003B57)](https://www.sqlite.org/fts5.html)
+[![Status: Experimental](https://img.shields.io/badge/status-experimental-orange)](#project-status)
 
-La branche `main` contient les contrats Gate 0, la fondation locale Gate 1, l'ingestion arXiv préparée, la recherche FTS5, les collections, les citations et leur CLI Gate 2. Ces comportements passent sur fixtures locales et sans réseau.
+Build a local scientific literature corpus with traceable sources. Discover and ingest arXiv metadata, search titles and abstracts with SQLite FTS5, organize papers into collections, and export citations from stored bibliographic observations.
 
-Gate 2 reste bloqué par la revue humaine de pertinence, actuellement à 0 sur 30. Un candidat réel de 120 métadonnées arXiv et son index FTS5 ont exécuté 30 requêtes avec une couverture complète: 25 ont placé au moins un papier attendu dans le top cinq, sans échec brut des six requêtes must-find. Cette mesure ne remplace ni les 30 verdicts humains, ni l'approbation finale du gate. Le serveur MCP, les watchlists, l'acquisition de texte intégral, l'analyse LLM, l'identité enrichie et la fédération restent des contrats cibles. Le projet reste expérimental.
+Paper Insights is the scientific literature companion to [YouTube Video Insights](https://github.com/FlorianBruniaux/youtube-video-insights), which covers video transcripts and timestamped evidence. Each project keeps its own corpus and provenance. Cross-corpus federation is planned.
 
-## Objectifs
+## Project status
 
-- rechercher des papiers à la demande par sujet, auteur, catégorie ou identifiant;
-- suivre des requêtes et des catégories afin de détecter les nouvelles publications;
-- conserver les métadonnées, les versions, les artefacts et leur provenance;
-- indexer les titres, résumés et textes autorisés dans SQLite FTS5;
-- produire des analyses reliées aux passages qui les justifient;
-- exporter des citations vérifiables pour des articles;
-- enrichir les auteurs avec ORCID, OpenAlex et leurs pages institutionnelles;
-- exposer une surface MCP locale et en lecture seule.
+The `main` branch contains the Gate 0 contracts, Gate 1 local foundation, prepared arXiv ingestion, FTS5 search, collections, citations, and the Gate 2 CLI. These behaviors pass tests against local fixtures without network access.
 
-## Limites initiales
+Gate 2 remains blocked on human relevance review, currently **0 of 30 reviews completed**. A candidate corpus of 120 real arXiv metadata records and its FTS5 index ran 30 queries with complete coverage: 25 placed at least one expected paper in the top five, with no raw misses across the six must-find queries. These measurements do not replace the 30 human verdicts or final gate approval.
 
-- arXiv constitue la première source, mais le modèle de domaine ne dépend pas d'arXiv;
-- la première version reste locale et mono-utilisateur;
-- SQLite remplace PostgreSQL et Redis tant que les mesures ne prouvent pas leur nécessité;
-- l'analyse de PDF arrive après la collecte fiable des métadonnées et des résumés;
-- aucune correspondance LinkedIn n'est validée automatiquement à partir d'un nom;
-- aucun scraping LinkedIn n'entre dans le périmètre.
+The MCP server, watchlists, full-text acquisition, LLM analysis, enriched author identity, and federation remain target contracts. **This project is experimental.**
 
-## Architecture cible
+## Goals
+
+- Search for papers by topic, author, category, or identifier.
+- Monitor queries and categories for new publications.
+- Preserve metadata, versions, artifacts, and their provenance.
+- Index titles, abstracts, and authorized full text with SQLite FTS5.
+- Produce analyses linked to the passages that support them.
+- Export verifiable citations for articles.
+- Enrich author records with ORCID, OpenAlex, and institutional pages.
+- Expose a local, read-only MCP interface.
+
+## Initial boundaries
+
+- arXiv is the first source; the domain model remains source-independent.
+- The initial version is local and single-user.
+- SQLite serves the storage and search needs until measurements justify PostgreSQL or Redis.
+- PDF analysis follows reliable metadata and abstract collection.
+- A name alone never confirms a LinkedIn identity match.
+- LinkedIn scraping is out of scope.
+
+## Target architecture
 
 ```text
 providers -> application services -> domain + ports
@@ -37,55 +58,69 @@ CLI / MCP -> application services
 bootstrap -> interfaces + services + adapters
 ```
 
-Cette vue simplifiée montre la direction des dépendances, pas un pipeline d'import. Le catalogue relationnel conserve les entités et la provenance. Un index FTS5 séparé contient des passages reproductibles. Les analyses référencent les identifiants de passages et l'empreinte de l'artefact utilisé.
+This simplified view shows dependency direction. The relational catalog stores entities and provenance. A separate FTS5 index contains reproducible passages. Analyses reference passage identifiers and the fingerprint of the source artifact.
 
-## Documents de référence
+## Documentation
 
-| Document | Rôle |
+| Document | Purpose |
 | --- | --- |
-| [Vision](docs/VISION.md) | Problème, utilisateurs et résultat attendu |
-| [Architecture](docs/ARCHITECTURE.md) | Composants, dépendances et flux |
-| [Roadmap](docs/ROADMAP.md) | Phases et critères de sortie |
-| [Spécification produit](docs/specs/PRODUCT.md) | Cas d'usage et exigences |
-| [Modèle de données](docs/specs/DATA-MODEL.md) | Entités, identifiants et provenance |
-| [Ingestion](docs/specs/INGESTION.md) | Découverte, reprise et idempotence |
-| [Ports d'application](docs/specs/PORTS.md) | Signatures synchrones et DTO gelés |
-| [Recherche et MCP](docs/specs/SEARCH-AND-MCP.md) | FTS5, citations et outils MCP |
-| [Revue humaine de pertinence](docs/benchmarks/SEARCH-RELEVANCE-GATE.md) | Protocole hors réseau du Gate 2 |
-| [Matrice de capacité et de preuve](docs/evidence/capability-matrix.json) | État vérifiable, exclusions, plafond de claim et prochaine évaluation |
-| [Optimisation de la gouvernance de preuve](docs/superpowers/plans/2026-09-05-evidence-governance-optimization.md) | Extension transversale du plan complet |
-| [Watchlists](docs/specs/WATCHLISTS.md) | Curseurs, overlap, finalisation et digests |
-| [Analyse](docs/specs/ANALYSIS.md) | Texte intégral, passages, cache, claims et preuves |
-| [Identité des auteurs](docs/specs/AUTHOR-IDENTITY.md) | Observations, décisions réversibles et LinkedIn manuel |
-| [Fédération](docs/specs/FEDERATION.md) | Contrat multi-corpus et couverture partielle |
-| [Décision Python et SQLite](docs/decisions/ADR-0001-python-sqlite.md) | Choix techniques initiaux |
-| [Décision observations et provenance](docs/decisions/ADR-0002-versioned-observations-and-provenance.md) | Autorité des versions, snapshots et preuves |
-| [Décision manifeste et publication](docs/decisions/ADR-0003-preview-manifest-and-publication.md) | Batch confirmé, révision et publication atomique |
-| [Décision monolithe modulaire](docs/decisions/ADR-0004-modular-monolith-ports.md) | Couches, ports et dépendances |
+| [Vision](docs/VISION.md) | Problem, users, and intended outcomes |
+| [Architecture](docs/ARCHITECTURE.md) | Components, dependencies, and data flows |
+| [Roadmap](docs/ROADMAP.md) | Phases and exit criteria |
+| [Product specification](docs/specs/PRODUCT.md) | Use cases and requirements |
+| [Data model](docs/specs/DATA-MODEL.md) | Entities, identifiers, and provenance |
+| [Ingestion](docs/specs/INGESTION.md) | Discovery, recovery, and idempotency |
+| [Application ports](docs/specs/PORTS.md) | Synchronous signatures and frozen DTOs |
+| [Search and MCP](docs/specs/SEARCH-AND-MCP.md) | FTS5, citations, and MCP tools |
+| [Human relevance review](docs/benchmarks/SEARCH-RELEVANCE-GATE.md) | Offline Gate 2 protocol |
+| [Capability and evidence matrix](docs/evidence/capability-matrix.json) | Verifiable status, exclusions, claim limits, and next evaluations |
+| [Evidence governance plan](docs/superpowers/plans/2026-09-05-evidence-governance-optimization.md) | Cross-cutting extension to the complete plan |
+| [Watchlists](docs/specs/WATCHLISTS.md) | Cursors, overlap, finalization, and digests |
+| [Analysis](docs/specs/ANALYSIS.md) | Full text, passages, cache, claims, and evidence |
+| [Author identity](docs/specs/AUTHOR-IDENTITY.md) | Observations, reversible decisions, and manual LinkedIn confirmation |
+| [Federation](docs/specs/FEDERATION.md) | Cross-corpus contract and partial coverage |
+| [Python and SQLite decision](docs/decisions/ADR-0001-python-sqlite.md) | Initial technical choices |
+| [Observations and provenance decision](docs/decisions/ADR-0002-versioned-observations-and-provenance.md) | Version authority, snapshots, and evidence |
+| [Manifest and publication decision](docs/decisions/ADR-0003-preview-manifest-and-publication.md) | Confirmed batches, revisions, and atomic publication |
+| [Modular monolith decision](docs/decisions/ADR-0004-modular-monolith-ports.md) | Layers, ports, and dependencies |
 
-## Configuration des agents
+## Agent configuration
 
-- `AGENTS.md` définit les règles communes à Codex et aux autres agents.
-- `CLAUDE.md` ajoute les conventions propres à Claude Code.
-- `.claude/agents/` contient les rôles spécialisés.
-- `.agents/skills/` contient les workflows portables.
-- `.claude/skills` pointe vers le même répertoire afin d'éviter deux copies divergentes.
-- `.claude/hooks/` contient des garde-fous locaux et testés.
+- `AGENTS.md` defines shared rules for Codex and other agents.
+- `CLAUDE.md` adds Claude Code conventions.
+- `.claude/agents/` contains specialized roles.
+- `.agents/skills/` contains portable workflows.
+- `.claude/skills` points to the same directory to avoid divergent copies.
+- `.claude/hooks/` contains tested local guards.
 
-## Validation du socle
+## Scaffold validation
 
 ```bash
 python3 scripts/validate_project.py
 python3 -m unittest discover -s tests -p 'test_*.py'
 ```
 
-Ces commandes n'installent aucune dépendance et n'accèdent pas au réseau.
+These commands do not install dependencies or access the network.
 
-## Sources officielles initiales
+## Explore the ecosystem
 
-- [Aide arXiv pour la catégorie Computer Science](https://info.arxiv.org/help/cs/index.html)
-- [Publications récentes en intelligence artificielle](https://arxiv.org/list/cs.AI/recent)
+Related tools for the wider research and publishing workflow:
 
-## Licence
+| Project | Use it for |
+| --- | --- |
+| [YouTube Video Insights](https://github.com/FlorianBruniaux/youtube-video-insights) | Build a local corpus of video transcripts, search timestamped evidence, and export cited research dossiers. Use it alongside Paper Insights when a topic spans papers and talks. |
+| [Claude Code Ultimate Guide](https://github.com/FlorianBruniaux/claude-code-ultimate-guide) | Learn agent workflows, skills, hooks, and MCP usage for research and development. |
+| [Google Search Console MCP](https://github.com/FlorianBruniaux/google-search-console-mcp) | Query Search Console and analytics when measuring the visibility of articles published from your research. |
 
-Le code source est publié dans le dépôt public [FlorianBruniaux/paper-insights](https://github.com/FlorianBruniaux/paper-insights). Aucune licence publique n'est accordée à ce stade.
+These projects run independently. The links describe complementary uses; they do not imply an implemented Paper Insights integration.
+
+[Browse Florian's open-source projects](https://github.com/FlorianBruniaux#open-source-galaxy) or visit the [project portfolio](https://www.florian.bruniaux.com/projects/?utm_source=github&utm_medium=readme&utm_campaign=paper-insights).
+
+## Initial official sources
+
+- [arXiv Computer Science help](https://info.arxiv.org/help/cs/index.html)
+- [Recent artificial intelligence papers](https://arxiv.org/list/cs.AI/recent)
+
+## License
+
+The source code is published in the public [FlorianBruniaux/paper-insights](https://github.com/FlorianBruniaux/paper-insights) repository. No public license has been granted at this stage.
