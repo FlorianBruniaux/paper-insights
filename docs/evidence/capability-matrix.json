@@ -134,10 +134,11 @@
         "references": []
       },
       "known_exclusions": [
-        "Analysis, identity enrichment and federation have domain contracts but no opened runtime work package."
+        "Analysis, identity enrichment and federation have domain contracts but no opened runtime work package.",
+        "Critical source review is specified in docs/specs/CRITICAL-REVIEW.md; its rubric, reversible selection and false-exclusion calibration are not implemented or validated."
       ],
       "claim_ceiling": "Gate 4 contracts exist; no source-backed analysis, identity or federation runtime is claimed.",
-      "next_evaluation": "Complete Gate 3, then land the Wave 4 schema and federation contract cut."
+      "next_evaluation": "Complete Gate 3, then freeze the critical-review additions to analysis contracts before the Wave 4 schema cut and implement WP-40 with separate review-quality calibration."
     },
     {
       "id": "gate5.release",

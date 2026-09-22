@@ -688,6 +688,7 @@ Commit: `feat: add bounded fulltext extraction`
 **Steps:**
 
 - [ ] Freeze corpus capabilities, native scores, source types, partial coverage and evidence-bundle manifest in ADR-0005.
+- [ ] Freeze the [critical source review](../../specs/CRITICAL-REVIEW.md) records, evidence coverage, and reversible selection events before preparing the analysis migration for WP-40.
 - [ ] Land both additive migrations against one linear Alembic head.
 - [ ] Add `author_identity_identifier_evidence` in `0004_author_identity.py`; never place an initial-schema FK toward a table that does not yet exist.
 - [ ] Run zero-to-head, every-upgrade, foreign-key and quick-check tests before opening Wave 4 worktrees.
@@ -696,6 +697,14 @@ Commit: `feat: add bounded fulltext extraction`
 Once this contract cut passes, WP-40, WP-41 and WP-42 run concurrently.
 
 ### WP-40: Source-backed analysis and cache
+
+**Scope extension (2026-09-22):** Apply the accepted
+[critical source review contract](../../specs/CRITICAL-REVIEW.md). Its bounded
+implementation order adds the paper rubric, scoped review records, evidence
+coverage, reversible selection events, and false-exclusion calibration. Freeze
+the schema/port additions before the WP-39 migration cut, or use a separately
+reviewed migration if needed. Existing prerequisite gates remain unchanged;
+critical review is not implemented by this plan update.
 
 **Owner:** Worker A after both Wave 4 migrations are merged.
 

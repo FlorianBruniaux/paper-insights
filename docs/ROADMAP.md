@@ -140,6 +140,13 @@ Critères de sortie:
 
 ## Phase 5: analyse sourcée
 
+**Planned extension:** [Critical source review](specs/CRITICAL-REVIEW.md) adds a
+separate appraisal stage before editorial selection. Deliver the paper rubric,
+passage-backed findings, explicit evidence gaps, reversible decisions, and a
+human calibration of false exclusions. Abstract screening cannot certify
+methodological quality. This extends WP-40 after its existing prerequisites;
+no runtime or automated filtering is delivered by the specification.
+
 Livrables:
 
 - politique de texte intégral revue avant activation;

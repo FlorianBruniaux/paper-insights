@@ -1,5 +1,13 @@
 # Spécification du texte intégral et des analyses
 
+## Planned critical review extension
+
+[Critical source review](CRITICAL-REVIEW.md) extends this analysis contract with
+paper-specific appraisal and reversible editorial selection. It separates
+abstract-only screening from evidence-backed reading, and model recommendations
+from human decisions. It remains unimplemented and does not replace the existing
+human analysis gate or authorize batch filtering.
+
 ## Politique avant code
 
 Le texte intégral n'est acquis que depuis une source autorisée par `docs/policies/FULLTEXT-ACCESS.md`. La politique versionne hôtes, schémas, redirections, types MIME, taille, rétention et cas de refus. L'absence de droit ou de preuve reste `UNKNOWN` et bloque l'acquisition.

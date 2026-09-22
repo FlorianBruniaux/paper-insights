@@ -6,6 +6,7 @@ All notable changes to this project are documented here.
 
 ### Added
 
+- Accepted critical source review specification and bounded implementation plan: paper-specific appraisal, abstract/full-text evidence limits, reversible editorial selection, and calibration of false exclusions. Linked into Phase 5, WP-40, the analysis contract, and the capability matrix; no review runtime or automatic quality filter is delivered.
 - English workflow infographic near the top of the README, styled after YouTube Video Insights, with current CLI stages, experimental status, and a separate planned-feature row.
 - Editable Mermaid workflow and image-generation prompt with source and asset provenance.
 - Author profile at the top of the README, repository badges, and links to YouTube Video Insights, Claude Code Ultimate Guide, Google Search Console MCP, and the wider project portfolio.

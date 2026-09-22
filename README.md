@@ -33,6 +33,8 @@ Gate 2 remains blocked on human relevance review, currently **0 of 30 reviews co
 
 The MCP server, watchlists, full-text acquisition, LLM analysis, enriched author identity, and federation remain target contracts. **This project is experimental.**
 
+[Critical source review](docs/specs/CRITICAL-REVIEW.md) is also planned: distinguish relevance from scientific and editorial value, support recommendations with passages, and keep selection decisions reversible. Abstract-only screening will remain separate from critical reading of available full text. No quality filter is implemented yet.
+
 ## Goals
 
 - Search for papers by topic, author, category, or identifier.
@@ -81,6 +83,7 @@ This simplified view shows dependency direction. The relational catalog stores e
 | [Evidence governance plan](docs/superpowers/plans/2026-09-05-evidence-governance-optimization.md) | Cross-cutting extension to the complete plan |
 | [Watchlists](docs/specs/WATCHLISTS.md) | Cursors, overlap, finalization, and digests |
 | [Analysis](docs/specs/ANALYSIS.md) | Full text, passages, cache, claims, and evidence |
+| [Critical source review](docs/specs/CRITICAL-REVIEW.md) | Planned paper appraisal, evidence limits, reversible selection, and implementation order |
 | [Author identity](docs/specs/AUTHOR-IDENTITY.md) | Observations, reversible decisions, and manual LinkedIn confirmation |
 | [Federation](docs/specs/FEDERATION.md) | Cross-corpus contract and partial coverage |
 | [Python and SQLite decision](docs/decisions/ADR-0001-python-sqlite.md) | Initial technical choices |
